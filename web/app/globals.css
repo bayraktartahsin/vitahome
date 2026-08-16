@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Two temperatures. The Family surface is warm light; the Console is dense dark.
+   The contrast is the story: warm where families live, dense where clinicians work. */
+
+.theme-family {
+  background: #FAF7F2;
+  color: #26332B;
+}
+
+.theme-console {
+  background: #10141A;
+  color: #E8EAED;
+  color-scheme: dark;
+}
+
+html, body { padding: 0; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
