@@ -57,7 +57,7 @@ export default function Drill() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        patientId: patient, agent: "scheduler", instructionId: "i_06",
+        patientId: patient, agent: "scheduler", instructionId: "i_07",
         payload: { specialty: "cardiology", daysOut: 7 },
       }),
     }).catch(() => {});

@@ -33,7 +33,7 @@ fi
 b "▸ dispatching Scheduler task ($SPECIALTY, ${DAYS}d)"
 TASK=$(curl -s --max-time 30 -X POST "$G/demo/dispatch" \
   -H 'Content-Type: application/json' \
-  -d "{\"patientId\":\"$PID\",\"agent\":\"scheduler\",\"instructionId\":\"i_06\",
+  -d "{\"patientId\":\"$PID\",\"agent\":\"scheduler\",\"instructionId\":\"i_07\",
        \"payload\":{\"specialty\":\"$SPECIALTY\",\"daysOut\":$DAYS}}" \
   | python3 -c "import sys,json;print(json.load(sys.stdin)['taskId'])")
 d "  task=$TASK"

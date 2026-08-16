@@ -15,6 +15,7 @@ import logging
 import os
 import socket
 import threading
+import uuid
 from typing import Any, Callable
 
 from ..config import settings
@@ -22,7 +23,21 @@ from . import ledger
 
 log = logging.getLogger("vitahome.runtime")
 
-WORKER_ID = f"{socket.gethostname()}-{os.getpid()}"
+
+def _worker_id() -> str:
+    """A name unique to THIS process.
+
+    Cloud Run gives every container the hostname ``localhost`` and PID 1, so
+    hostname+pid is identical across instances — which would make the audit log
+    show the same worker before and after a kill and quietly undermine the
+    thing the drill is trying to prove. The random suffix is minted once at
+    import, so a new worker is visibly a new worker.
+    """
+    rev = os.getenv("K_REVISION") or socket.gethostname()
+    return f"{rev.rsplit('-', 2)[-1] if '-' in rev else rev}·{uuid.uuid4().hex[:6]}"
+
+
+WORKER_ID = _worker_id()
 
 AgentBody = Callable[[str, str, dict[str, Any]], str]
 """(patient_id, task_id, task_data) -> human-readable completion summary"""

@@ -18,14 +18,16 @@ import json
 import logging
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from ..agents import parser as parser_agent
+from ..agents import reconciler as reconciler_agent
 from ..agents import scheduler as scheduler_agent
 from ..config import settings
 from ..fleet import chaos, dispatch, ledger, registry, runtime, supervisor
-from ..integrations import fhir
+from ..integrations import fhir, gemini
 from ..sim import hero_patient
 
 logging.basicConfig(level=settings.log_level)
@@ -51,7 +53,7 @@ def health():
 @app.get("/health/deep")
 def health_deep():
     """Proves the whole substrate is live — used in the demo to show real infra."""
-    return {"ok": True, "fhir": fhir.ping(),
+    return {"ok": True, "fhir": fhir.ping(), "gemini": gemini.ping(),
             "project": settings.gcp_project, "fhirStore": settings.hc_fhir_store}
 
 
@@ -74,14 +76,35 @@ def get_agent_card(agent: str):
 
 class CaptureRequest(BaseModel):
     patientId: str = "p_hero"
-    documentText: str | None = None      # dev path; image path added day 5
+    documentText: str | None = None
 
 
 @app.post("/capture")
 def capture(req: CaptureRequest):
-    """Synchronous parse — the demo's opening beat. Day 5 makes this multimodal."""
-    return {"status": "stub", "patientId": req.patientId,
-            "note": "Parser lands day 5 (see docs/BUILD-PLAN.md §5.4)"}
+    """Parse a document supplied as text. See /capture/photo for the image path."""
+    try:
+        return parser_agent.parse(req.patientId, text=req.documentText)
+    except gemini.ModelError as e:
+        raise HTTPException(502, f"parse failed: {e}") from e
+
+
+@app.post("/capture/photo")
+async def capture_photo(file: UploadFile = File(...), patientId: str = Form("p_hero")):
+    """The demo's opening beat: photograph the discharge summary, get a plan.
+
+    Synchronous, unlike the rest of the fleet — a human is standing there holding
+    a phone, and the ~1s wait is the product. Everything downstream of this is
+    async over Pub/Sub.
+    """
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp", "image/heic"}:
+        raise HTTPException(415, f"unsupported image type: {file.content_type}")
+    data = await file.read()
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(413, "image larger than 12 MB")
+    try:
+        return parser_agent.parse(patientId, image=data, mime_type=file.content_type)
+    except gemini.ModelError as e:
+        raise HTTPException(502, f"parse failed: {e}") from e
 
 
 @app.get("/patient/{pid}/plan")
@@ -130,6 +153,7 @@ def _decode_push(envelope: dict) -> dict:
 # ledger.run_step for every side effect — lifecycle is handled by the runtime.
 HANDLERS = {
     "scheduler": scheduler_agent.body,
+    "reconciler": reconciler_agent.body,
 }
 
 

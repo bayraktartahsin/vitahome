@@ -36,7 +36,11 @@ An agent fleet that **executes medical instructions**. Photograph a discharge su
 
 ## 3 · NAME
 
-**Homeward.** Warm, universal, names the vulnerable journey, zero jargon, zero VitaCare echo. "The Last Mile" survives as the spoken architecture line. Alternatives considered: Aftercare, Handoff, VitaHome (rejected — Vita-prefixed naming invites reskin comparison with the prior entry).
+**VitaHome.** *(Decided. Overrules this section's earlier recommendation of "Homeward", which is retained below as the reasoning that was weighed and rejected.)*
+
+The Vita prefix is deliberate: Graviti Labs ships Vita, a live health product, and VitaHome is the aftercare arm of that family rather than a standalone hackathon artifact. A founder with a shipped product extending it is a stronger story than a founder with an unrelated new name — it converts the "is this a weekend project?" question into a roadmap answer. "The Last Mile" survives as the spoken architecture line.
+
+The counter-argument, on the record: Vita-prefixed naming invites comparison with a prior entry by the same team. Mitigated by keeping the two products architecturally and narratively separate — different track, different thesis, no shared code. Alternatives considered: Homeward, Aftercare, Handoff.
 
 ---
 
@@ -90,7 +94,8 @@ An agent fleet that **executes medical instructions**. Photograph a discharge su
 
 Not scripted. **The judge holds the knife.**
 
-- Workers expose `/chaos/kill` (`os._exit(1)`). A `DRILL_SLOW` flag opens a reliable 8s window between steps.
+- **Two triggers, both real `os._exit(1)`.** `/chaos/arm` marks an agent to die inside its next step — the worker kills itself from within the step, before the side effect. `/chaos/kill` terminates whichever instance serves the request. ⚡ **Arm is the demo instrument**: hand-timed kills on Cloud Run land on an idle instance roughly half the time, which was observed live twice and is fatal on camera. Arming is deterministic and no less honest — the process still dies ungracefully, mid-step, with the message unacked. `DRILL_SLOW_SECONDS` additionally widens the window on one named step.
+- ⚡ **Pub/Sub `ackDeadline` is 90s**, above the slowest real task. Set too low and a still-running task gets a spurious redelivery: survivable (every step skips) but it inflates the attempt counter and invites a question you do not want mid-demo.
 - **Recovery is infrastructure, honestly:** Pub/Sub redelivery re-pushes the work; Cloud Run respawns the container. The supervisor doesn't respawn anything — **it narrates**: detects the stale heartbeat, writes `AGENT_DOWN` to the audit stream, and the UI shows the red gap → redelivery → steps 1–2 SKIPPED (idempotent) → step 3 executed → done.
 - In the live demo: *invite the judge to pick which agent dies, and when.* Show the Firestore doc before/after.
 - Rehearsed 20+ times. Must be boring by demo day.

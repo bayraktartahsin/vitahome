@@ -85,10 +85,27 @@ WEB_URL="$(gcloud run services describe vitahome-web --region "$REGION" \
   --project "$PROJECT" --format='value(status.url)')"
 
 echo "▸ Pub/Sub push subscriptions → agent endpoints"
+# One subscription per agent on a single topic, separated by an attribute
+# filter. This is the decoupling: dispatch.py publishes with agent="scheduler"
+# and never knows what a scheduler is or where it runs.
+#
+# ack-deadline is 90s, comfortably above the slowest real task (the FHIR write
+# path, plus the deliberate demo window in the Failure Drill). Set it too low
+# and Pub/Sub redelivers a task that is still running — survivable, because the
+# ledger skips completed steps, but it muddies the attempt counter.
 for a in reconciler scheduler pharmacist watchman coach escalator; do
-  gcloud pubsub subscriptions create "sub-$a" \
-    --topic=fleet-work --push-endpoint="${GATEWAY_URL}/agents/${a}" \
-    --ack-deadline=30 --project "$PROJECT" 2>/dev/null || echo "  sub-$a exists"
+  if gcloud pubsub subscriptions create "sub-$a" \
+      --topic=fleet-work --push-endpoint="${GATEWAY_URL}/agents/${a}" \
+      --message-filter="attributes.agent = \"${a}\"" \
+      --ack-deadline=90 --project "$PROJECT" 2>/dev/null; then
+    echo "  sub-$a created"
+  else
+    # Filters are immutable; endpoint and deadline are not. Converge what we can.
+    gcloud pubsub subscriptions update "sub-$a" \
+      --push-endpoint="${GATEWAY_URL}/agents/${a}" \
+      --ack-deadline=90 --project "$PROJECT" --quiet >/dev/null
+    echo "  sub-$a updated"
+  fi
 done
 
 echo

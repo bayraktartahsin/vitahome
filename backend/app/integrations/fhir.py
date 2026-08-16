@@ -92,6 +92,22 @@ def create(resource_type: str, body: dict[str, Any], idem: str | None = None) ->
     return r.json()
 
 
+def update(resource_type: str, rid: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Full-resource update (FHIR PUT).
+
+    Naturally idempotent: the caller sends the desired end state, so replaying
+    it converges rather than accumulating. This is how a medication gets stopped
+    — the resource is rewritten with ``status: stopped``, and doing that twice
+    is indistinguishable from doing it once.
+    """
+    r = httpx.put(f"{settings.fhir_base}/{resource_type}/{rid}",
+                  headers=_headers(),
+                  json={**body, "resourceType": resource_type, "id": rid},
+                  timeout=30.0)
+    _raise_for_outcome(r, resource_type)
+    return r.json()
+
+
 def read(resource_type: str, rid: str) -> dict[str, Any]:
     r = httpx.get(f"{settings.fhir_base}/{resource_type}/{rid}",
                   headers=_headers(), timeout=20.0)

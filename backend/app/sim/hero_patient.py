@@ -30,6 +30,9 @@ MEDICATIONS ON DISCHARGE
   4. Metoprolol succinate 25 mg PO daily
   5. STOP amlodipine 5 mg — replaced by metoprolol
 
+HOME MEDICATIONS
+  Resume home medications as previously prescribed.
+
 FOLLOW-UP
   - Cardiology (Dr. Chen) in 7 days
   - Primary care in 14 days
@@ -42,6 +45,16 @@ RESTRICTIONS
 RETURN TO EMERGENCY IF
   chest pain · shortness of breath at rest · bleeding · fainting
 """
+# Note the two lines that contradict each other: line 11 says STOP amlodipine,
+# line 14 says resume home medications as previously prescribed — and amlodipine
+# is one of his home medications, active in the FHIR store. Both statements are
+# on the page. Neither is a typo.
+#
+# This is not a puzzle planted for the demo. Boilerplate "resume home meds"
+# text coexisting with a specific stop order is one of the most common defects
+# in real discharge paperwork and a well-documented cause of medication errors
+# after discharge. The Reconciler has to notice it in the document rather than
+# be told about it, and then refuse to pick a side.
 
 # Pre-parsed instructions. The Parser agent produces this shape from the image;
 # seeding it lets every downstream agent be built and tested independently.
@@ -58,21 +71,25 @@ INSTRUCTIONS: list[dict[str, Any]] = [
      "criticality": "none", "confidence": 0.97, "status": "pending"},
     {"id": "i_05", "lineNo": 11, "type": "medication_stop",
      "text": "STOP amlodipine 5 mg — replaced by metoprolol",
+     "drug": "Amlodipine 5 mg",
      "criticality": "caution", "confidence": 0.96, "status": "pending"},
-    {"id": "i_06", "lineNo": 14, "type": "followup", "text": "Cardiology (Dr. Chen) in 7 days",
+    {"id": "i_06", "lineNo": 14, "type": "other",
+     "text": "Resume home medications as previously prescribed",
+     "criticality": "caution", "confidence": 0.95, "status": "pending"},
+    {"id": "i_07", "lineNo": 17, "type": "followup", "text": "Cardiology (Dr. Chen) in 7 days",
      "specialty": "cardiology", "daysOut": 7,
      "criticality": "caution", "confidence": 0.97, "status": "pending"},
-    {"id": "i_07", "lineNo": 15, "type": "followup", "text": "Primary care in 14 days",
+    {"id": "i_08", "lineNo": 18, "type": "followup", "text": "Primary care in 14 days",
      "specialty": "primary care", "daysOut": 14,
      "criticality": "none", "confidence": 0.96, "status": "pending"},
-    {"id": "i_08", "lineNo": 16, "type": "followup", "text": "Cardiac rehab intake within 21 days",
+    {"id": "i_09", "lineNo": 19, "type": "followup", "text": "Cardiac rehab intake within 21 days",
      "specialty": "cardiac rehab", "daysOut": 21,
      "criticality": "none", "confidence": 0.94, "status": "pending"},
-    {"id": "i_09", "lineNo": 19, "type": "restriction", "text": "No lifting over 10 lbs for 1 week",
+    {"id": "i_10", "lineNo": 22, "type": "restriction", "text": "No lifting over 10 lbs for 1 week",
      "criticality": "none", "confidence": 0.97, "status": "pending"},
-    {"id": "i_10", "lineNo": 20, "type": "restriction", "text": "No driving for 3 days",
+    {"id": "i_11", "lineNo": 23, "type": "restriction", "text": "No driving for 3 days",
      "criticality": "none", "confidence": 0.97, "status": "pending"},
-    {"id": "i_11", "lineNo": 23, "type": "red_flag",
+    {"id": "i_12", "lineNo": 26, "type": "red_flag",
      "text": "Return to emergency if: chest pain, shortness of breath at rest, bleeding, fainting",
      "criticality": "CRITICAL", "confidence": 0.98, "status": "pending",
      "flags": ["chest pain", "shortness of breath at rest", "bleeding", "fainting"]},

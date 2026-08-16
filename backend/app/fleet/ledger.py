@@ -31,6 +31,9 @@ from google.cloud import firestore
 from ..config import settings
 
 TaskStatus = Literal["pending", "leased", "done", "refused", "escalated", "failed"]
+TERMINAL = frozenset({"done", "refused", "escalated"})
+"""States a task never leaves. ``failed`` is deliberately absent — a failed task
+is expected to be redelivered and retried."""
 AuditKind = Literal[
     "heartbeat", "action", "AGENT_DOWN", "redelivery",
     "skip", "refusal", "escalation", "access", "lease",
@@ -210,8 +213,37 @@ def run_step(pid: str, task_id: str, agent: str, step_name: str,
 # terminal transitions
 # --------------------------------------------------------------------------
 
+def _enter_terminal(pid: str, task_id: str, fields: dict[str, Any]) -> bool:
+    """Move a task to a terminal state, once.
+
+    A task can legitimately be delivered again *after* it finished — the ack
+    deadline can expire while the last step is still running. The replay is
+    harmless (every step gets skipped) but the terminal transition must not run
+    twice, or the Autonomy Ledger counts one booking as two. The ledger is a
+    number we put on screen and defend, so it is guarded here rather than
+    trusted to happen once.
+
+    Returns True if this call is the one that made the transition.
+    """
+    ref = task_ref(pid, task_id)
+
+    @firestore.transactional
+    def _tx(tx: firestore.Transaction) -> bool:
+        snap = ref.get(transaction=tx)
+        if (snap.to_dict() or {}).get("status") in TERMINAL:
+            return False
+        tx.update(ref, fields)
+        return True
+
+    return _tx(db().transaction())
+
+
 def complete(pid: str, task_id: str, agent: str, summary: str = "") -> None:
-    task_ref(pid, task_id).update({"status": "done", "completedAt": _now()})
+    first = _enter_terminal(pid, task_id, {"status": "done", "completedAt": _now()})
+    if not first:
+        audit(pid, "skip", agent, "task already complete — replay produced no new effect",
+              task_id)
+        return
     audit(pid, "action", agent, summary or "task complete", task_id)
     bump_ledger(pid, "autonomous")
 
@@ -223,21 +255,23 @@ def refuse(pid: str, task_id: str, agent: str, reason: str,
     The fleet declines to act on an ambiguous instruction and hands a human a
     decision with the options pre-assembled. Calibrated non-autonomy.
     """
-    task_ref(pid, task_id).update({
+    if not _enter_terminal(pid, task_id, {
         "status": "refused",
         "refusal": {"reason": reason, "options": options or [], "at": _now()},
-    })
+    }):
+        return
     audit(pid, "refusal", agent, f"declined to act — {reason}", task_id)
     bump_ledger(pid, "refused")
 
 
 def escalate(pid: str, task_id: str, agent: str, trigger: str,
              context: dict[str, Any] | None = None) -> None:
-    task_ref(pid, task_id).update({
+    if not _enter_terminal(pid, task_id, {
         "status": "escalated",
         "escalation": {"trigger": trigger, "slaStartedAt": _now(),
                        "context": context or {}, "resolvedBy": None},
-    })
+    }):
+        return
     audit(pid, "escalation", agent, f"escalated to human — {trigger}", task_id)
     bump_ledger(pid, "humanDecisions")
 
