@@ -213,31 +213,71 @@ marked SKIPPED. Only the remaining work runs. Task completes.)*
 
 **SET UP**
 
-> This next part I do not control the timing of. Monitoring has been armed since
-> minute one, watching for the red flags written on *this* document.
-
-**WATCH** *(vitals cross the threshold. Watchman fires. Escalator decides. The
-console lights up.)*
-
-**PAY OFF**
-
-> Escalated to a human. Note it did not treat, did not advise, did not reassure
-> — it paged a clinician and started an SLA clock.
-
-**SET UP** *(the counter-beat — this is the beat that separates the demo from
-every other submission)*
-
-> Now the harder case.
-
-**WATCH** *(a second event fires. The Escalator declines to escalate.)*
-
-**PAY OFF**
-
-> Same monitor, different reading, and it decided a human was *not* needed.
+> Monitoring has been armed since minute one — and armed against the red flags
+> printed on *this* document, not a generic alarm. A different discharge summary
+> produces a different monitor from the same agent.
 >
-> Anything can be built to panic. Restraint is the expensive part — a system
-> that escalates everything gets ignored inside a week, and then it is worse
-> than nothing.
+> Here is a message from his daughter.
+
+**WATCH** *(`./scripts/monitor.sh chest_pain`. Silence — about 25 seconds.)*
+
+*(Watchman records the report to FHIR, matches two flags, hands off to the
+Escalator. The Escalator pages, an SLA clock starts, the console lights up.)*
+
+**PAY OFF**
+
+> Paged. Note what it did not do — it did not treat, it did not advise, it did
+> not reassure her. It put a clinician on it and started a five-minute clock.
+>
+> And that task is now the only kind in the system that no agent can close.
+> Escalations are human-terminated. The fleet can open that door; only a person
+> walks back through it.
+
+**SET UP** *(the counter-beat — this is what separates the demo from every other
+submission, so do not rush it)*
+
+> Now the harder one. Same patient, two days later — and pay attention to what
+> she is describing, because it is not a coincidence.
+
+**WATCH** *(`./scripts/monitor.sh lightheaded_on_standing`. Silence.)*
+
+*(Watchman finds nothing on the red-flag list but marks it worth attention, so
+it still routes to the Escalator — which declines to page, and records why.)*
+
+**PAY OFF**
+
+> It decided a human was not needed. Nobody was woken up.
+>
+> Read what it wrote down: the reason, the strongest argument against its own
+> decision, and the specific thing that would have changed its answer. A
+> decision not to act is as auditable here as a decision to act — otherwise
+> nobody can review it afterwards, and "the system didn't flag it" becomes
+> unfalsifiable.
+>
+> Anything can be built to panic. Restraint is the expensive part. A monitor
+> that escalates everything is ignored inside a week, and an ignored monitor is
+> worse than none — it replaces a gap in coverage with the belief that somebody
+> is watching.
+
+*(Then the connection. Say it slowly — this is the line that makes the whole
+demo one thing instead of five features.)*
+
+> And look at what it is. Lightheaded on standing. Three days after the
+> Reconciler refused to decide whether he should still be on a second blood
+> pressure medication.
+>
+> That is the unresolved question showing up in his body. Which is the honest
+> argument for why refusing has to come with a clock on it — a decision handed
+> to a human is not finished, it is pending, and the patient is living inside
+> the gap while it waits.
+
+*(If a judge asks whether a model could be talked into staying quiet:)*
+
+> No. The model advises, the code decides, and the code can only overrule it in
+> one direction. If it recommends standing down on a symptom that is printed on
+> the patient's own return-to-emergency list, it gets escalated anyway and the
+> disagreement is written to the audit trail. There is no path in that file
+> where a model's reassurance suppresses a documented red flag.
 
 ---
 

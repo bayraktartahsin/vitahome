@@ -43,6 +43,12 @@ class Settings(BaseSettings):
     drill_slow_step: str = "fhir_appointment"  # ...on exactly this step, so the window is predictable
     parser_confidence_floor: float = 0.85   # below this → human exception queue, never guessed
 
+    # How long a human has to answer an escalation before the console shows it
+    # as breached. Displayed as a countdown, never auto-resolved — a breached
+    # SLA stays breached, because a timer that quietly clears itself is worse
+    # than no timer.
+    sla_minutes: dict[str, int] = {"emergency": 5, "urgent": 30, "routine": 480}
+
     # --- Runtime ---
     port: int = 8080
     log_level: str = "INFO"

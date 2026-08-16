@@ -85,7 +85,8 @@ d=json.load(sys.stdin)
 tot=sum(d.values())
 mark='\033[32m✓' if tot==0 else '\033[33m!'
 print(f\"  {mark}\033[0m autonomy ledger: {d['autonomous']} autonomous · {d['humanDecisions']} human · {d['refused']} refused\")
-if tot: print('    (rehearsal counts still on the board — reset before recording)')
+if tot: print(f'    rehearsal counts still on the board — clear with:')
+if tot: print(f'      curl -XPOST \"$G/demo/reset?patientId=$PID\"')
 " 2>/dev/null || bad "ledger unreachable"
 
 STUCK=$(curl -s --max-time 25 "$G/patient/$PID/tasks" 2>/dev/null | python3 -c "

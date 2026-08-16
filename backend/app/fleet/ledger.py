@@ -276,6 +276,69 @@ def escalate(pid: str, task_id: str, agent: str, trigger: str,
     bump_ledger(pid, "humanDecisions")
 
 
+def resolve_escalation(pid: str, task_id: str, actor: str, note: str = "") -> dict[str, Any]:
+    """Close an escalation. Only a human calls this.
+
+    Escalations are the one terminal state no agent can clear — that is what
+    "human-terminated" means, and it is only true if there is exactly one way
+    out and it requires a person. The SLA clock stops here and nowhere else.
+    """
+    ref = task_ref(pid, task_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise KeyError(f"task {task_id} not found for {pid}")
+    data = snap.to_dict() or {}
+    esc = data.get("escalation") or {}
+    # Already closed is not an error. Two clinicians can be looking at the same
+    # queue, and a double-click should say who got there first, not throw.
+    if esc.get("resolvedBy"):
+        return {"taskId": task_id, "alreadyResolvedBy": esc["resolvedBy"]}
+    if data.get("status") != "escalated":
+        raise ValueError(f"task {task_id} is '{data.get('status')}', not an open escalation")
+
+    started = esc.get("slaStartedAt")
+    elapsed = int((_now() - started).total_seconds()) if started else None
+    ref.update({
+        "escalation": {**esc, "resolvedBy": actor, "resolvedAt": _now(),
+                       "resolutionNote": note, "elapsedSeconds": elapsed},
+        "status": "resolved",
+    })
+    audit(pid, "action", actor, f"escalation closed by {actor}" + (f" — {note}" if note else ""),
+          task_id, {"humanResolved": True, "elapsedSeconds": elapsed})
+    return {"taskId": task_id, "resolvedBy": actor, "elapsedSeconds": elapsed}
+
+
+def decide_refusal(pid: str, task_id: str, actor: str, option: str) -> dict[str, Any]:
+    """A human picks one of the options a refusal handed them.
+
+    The refusal is not overwritten — the question, the options, and the answer
+    all stay on the task. Six months later the useful record is not "amlodipine
+    was stopped", it is "the fleet would not choose, and this named person did,
+    at this time, from these two readings".
+    """
+    ref = task_ref(pid, task_id)
+    snap = ref.get()
+    if not snap.exists:
+        raise KeyError(f"task {task_id} not found for {pid}")
+    data = snap.to_dict() or {}
+    ref_data = data.get("refusal") or {}
+    if ref_data.get("decidedBy"):
+        return {"taskId": task_id, "alreadyDecidedBy": ref_data["decidedBy"]}
+    if data.get("status") != "refused":
+        raise ValueError(f"task {task_id} is '{data.get('status')}', not an open refusal")
+    if option not in (ref_data.get("options") or []):
+        raise ValueError("that option was not one of the ones offered")
+
+    ref.update({
+        "refusal": {**ref_data, "decidedBy": actor, "decision": option, "decidedAt": _now()},
+        "status": "resolved",
+    })
+    audit(pid, "action", actor, f"{actor} decided: {option}", task_id,
+          {"humanDecision": True, "question": ref_data.get("reason")})
+    bump_ledger(pid, "humanDecisions")
+    return {"taskId": task_id, "decidedBy": actor, "decision": option}
+
+
 def fail(pid: str, task_id: str, agent: str, err: str) -> None:
     task_ref(pid, task_id).update({"status": "failed", "error": err})
     audit(pid, "action", agent, f"task failed: {err}", task_id)

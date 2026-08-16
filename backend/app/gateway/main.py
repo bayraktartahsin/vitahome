@@ -22,13 +22,15 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from ..agents import escalator as escalator_agent
 from ..agents import parser as parser_agent
 from ..agents import reconciler as reconciler_agent
 from ..agents import scheduler as scheduler_agent
+from ..agents import watchman as watchman_agent
 from ..config import settings
 from ..fleet import chaos, dispatch, ledger, registry, runtime, supervisor
 from ..integrations import fhir, gemini
-from ..sim import hero_patient
+from ..sim import hero_patient, vitals
 
 logging.basicConfig(level=settings.log_level)
 log = logging.getLogger("vitahome")
@@ -132,6 +134,79 @@ def get_tasks(pid: str, limit: int = 60):
     return {"tasks": tasks, "count": len(tasks)}
 
 
+class HumanAction(BaseModel):
+    actor: str = "Dr. Chen"
+    note: str = ""
+    option: str | None = None
+
+
+@app.post("/patient/{pid}/task/{task_id}/resolve")
+def resolve_escalation(pid: str, task_id: str, req: HumanAction):
+    """Close an escalation. The only exit from a human-terminated task."""
+    try:
+        return ledger.resolve_escalation(pid, task_id, req.actor, req.note)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@app.post("/patient/{pid}/task/{task_id}/decide")
+def decide_refusal(pid: str, task_id: str, req: HumanAction):
+    """Answer a refusal by choosing one of the options it offered."""
+    if not req.option:
+        raise HTTPException(400, "option is required")
+    try:
+        return ledger.decide_refusal(pid, task_id, req.actor, req.option)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from e
+    except ValueError as e:
+        raise HTTPException(409, str(e)) from e
+
+
+@app.get("/patient/{pid}/exceptions")
+def get_exceptions(pid: str):
+    """Everything waiting on a person, worst SLA first.
+
+    Sorted by how long it has been waiting against its own deadline — not by
+    arrival. A queue ordered by arrival time is a queue that lets the urgent
+    thing sit behind the routine one.
+    """
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    snaps = (ledger.db().collection("patients").document(pid)
+             .collection("tasks").limit(200).stream())
+    out = []
+    for s in snaps:
+        t = s.to_dict() or {}
+        if t.get("status") not in ("refused", "escalated"):
+            continue
+        esc, ref = t.get("escalation") or {}, t.get("refusal") or {}
+        started = esc.get("slaStartedAt") or ref.get("at")
+        sla = int(esc.get("slaMinutes") or 0) if esc else 0
+        waited = int((now - started).total_seconds()) if started else 0
+        out.append({
+            "taskId": t.get("taskId"), "agent": t.get("agent"), "kind": t.get("status"),
+            "question": ref.get("reason") or esc.get("trigger"),
+            "options": ref.get("options") or [],
+            "urgency": esc.get("urgency"),
+            "rationale": esc.get("rationale"),
+            "argumentsAgainst": esc.get("argumentsAgainst"),
+            "hardOverride": esc.get("hardOverride", False),
+            "deadLetter": esc.get("context", {}).get("deadLetter", False),
+            "waitedSeconds": waited,
+            "slaSeconds": sla * 60,
+            "breached": bool(sla) and waited > sla * 60,
+        })
+    # Breached first, then closest to breaching. Refusals have no SLA, so they
+    # sort by how long they have waited — an unanswered question is not free.
+    out.sort(key=lambda r: (not r["breached"],
+                            -(r["waitedSeconds"] / r["slaSeconds"]) if r["slaSeconds"]
+                            else -r["waitedSeconds"] / 3600))
+    return {"exceptions": out, "count": len(out),
+            "breached": sum(1 for r in out if r["breached"])}
+
+
 @app.get("/patient/{pid}/audit")
 def get_audit(pid: str, limit: int = 200):
     from google.cloud import firestore as fs
@@ -154,6 +229,8 @@ def _decode_push(envelope: dict) -> dict:
 HANDLERS = {
     "scheduler": scheduler_agent.body,
     "reconciler": reconciler_agent.body,
+    "watchman": watchman_agent.body,
+    "escalator": escalator_agent.body,
 }
 
 
@@ -204,6 +281,64 @@ def demo_dispatch(req: DispatchRequest):
         raise HTTPException(404, "unknown agent")
     task_id = dispatch.dispatch(req.patientId, req.agent, req.instructionId, req.payload)
     return {"taskId": task_id, "agent": req.agent, "patientId": req.patientId}
+
+
+@app.post("/demo/reset")
+def demo_reset(patientId: str = "p_hero"):
+    """Clear this patient's tasks, audit trail and counters.
+
+    For rehearsals. The demo shows an Autonomy Ledger and an audit stream, and
+    both are worthless on camera if they still carry yesterday's practice runs.
+
+    Scoped to one patient and deliberately not exposed anywhere in the UI: the
+    audit trail is append-only by design, and the one thing that may erase it is
+    an explicit operator action against a named demo fleet.
+    """
+    pdoc = ledger.db().collection("patients").document(patientId)
+    removed = {"tasks": 0, "audit": 0}
+    for coll in ("tasks", "audit"):
+        # Batched deletes: a patient with a few hundred audit rows would
+        # otherwise be a few hundred round trips.
+        while True:
+            batch = ledger.db().batch()
+            docs = list(pdoc.collection(coll).limit(400).stream())
+            if not docs:
+                break
+            for d in docs:
+                batch.delete(d.reference)
+            batch.commit()
+            removed[coll] += len(docs)
+    ledger.db().collection("ledger").document(patientId).delete()
+    pdoc.set({"openConflicts": [], "fleetState": "idle"}, merge=True)
+    chaos.disarm()
+    return {"reset": patientId, "removed": removed, "ledger": ledger.read_ledger(patientId)}
+
+
+@app.get("/demo/scenarios")
+def demo_scenarios():
+    """The two home-monitoring scenarios, labelled with what each is meant to show."""
+    return {"scenarios": [vitals.scenario(k) for k in vitals.SCENARIOS],
+            "source": "simulated home monitor"}
+
+
+@app.post("/demo/observe")
+def demo_observe(scenario: str = "chest_pain", patientId: str = "p_hero"):
+    """Send a home-monitoring report into the fleet.
+
+    Goes to the Watchman, which records it and decides whether it matches this
+    patient's own red flags. The Watchman never pages anyone — if something
+    matches, it hands off to the Escalator, and that agent decides.
+    """
+    try:
+        sc = vitals.scenario(scenario)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from e
+    task_id = dispatch.dispatch(patientId, "watchman", None, {
+        "observation": sc["observation"], "context": sc["context"],
+        "scenario": scenario, "source": "simulated home monitor",
+    })
+    return {"taskId": task_id, "scenario": scenario, "expect": sc["expect"],
+            "agent": "watchman"}
 
 
 @app.post("/demo/book-followups")

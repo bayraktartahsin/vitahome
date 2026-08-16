@@ -30,3 +30,6 @@ gcp-key*.json
 data/
 *.db
 *.sqlite
+
+# TS incremental build cache
+*.tsbuildinfo
