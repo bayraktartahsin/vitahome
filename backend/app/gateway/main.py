@@ -182,18 +182,23 @@ def get_exceptions(pid: str):
         if t.get("status") not in ("refused", "escalated"):
             continue
         esc, ref = t.get("escalation") or {}, t.get("refusal") or {}
+        # Everything the Escalator decided lives under escalation.context —
+        # ledger.escalate stores the agent's payload there verbatim rather than
+        # spreading it, so the ledger stays agnostic about what an agent
+        # attaches. Flatten it here, at the API boundary, for the console.
+        ctx = esc.get("context") or {}
         started = esc.get("slaStartedAt") or ref.get("at")
-        sla = int(esc.get("slaMinutes") or 0) if esc else 0
+        sla = int(ctx.get("slaMinutes") or 0)
         waited = int((now - started).total_seconds()) if started else 0
         out.append({
             "taskId": t.get("taskId"), "agent": t.get("agent"), "kind": t.get("status"),
             "question": ref.get("reason") or esc.get("trigger"),
             "options": ref.get("options") or [],
-            "urgency": esc.get("urgency"),
-            "rationale": esc.get("rationale"),
-            "argumentsAgainst": esc.get("argumentsAgainst"),
-            "hardOverride": esc.get("hardOverride", False),
-            "deadLetter": esc.get("context", {}).get("deadLetter", False),
+            "urgency": ctx.get("urgency"),
+            "rationale": ctx.get("rationale"),
+            "argumentsAgainst": ctx.get("argumentsAgainst"),
+            "hardOverride": bool(ctx.get("hardOverride")),
+            "deadLetter": bool(ctx.get("deadLetter")),
             "waitedSeconds": waited,
             "slaSeconds": sla * 60,
             "breached": bool(sla) and waited > sla * 60,
