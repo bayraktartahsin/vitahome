@@ -34,6 +34,13 @@ http() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$1" 2>/dev/null |
 
 # ---------------------------------------------------------------- services --
 hd "services"
+
+# Both services scale to zero when idle, which keeps the bill near nothing
+# between working sessions but means the first request after a quiet spell pays
+# a cold start. Warm them before anything is timed or filmed.
+curl -s -o /dev/null --max-time 60 "$G/health" 2>/dev/null
+curl -s -o /dev/null --max-time 60 "$W/" 2>/dev/null
+
 code=$(http "$G/health")
 [ "$code" = "200" ] && ok "gateway up  $G" || bad "gateway /health returned $code"
 
@@ -48,6 +55,17 @@ done
 REV=$(gcloud run services describe vitahome-gateway --region "$REGION" --project "$PROJECT" \
       --format='value(status.latestReadyRevisionName)' 2>/dev/null)
 [ -n "$REV" ] && ok "gateway revision $REV" || bad "cannot read gateway revision"
+
+# Cost guard. min-instances 0 is right while building — it is wrong on the day a
+# judge opens the link cold and waits ten seconds for a first paint.
+MIN=$(gcloud run services describe vitahome-gateway --region "$REGION" --project "$PROJECT" \
+      --format="value(spec.template.metadata.annotations['autoscaling.knative.dev/minScale'])" 2>/dev/null)
+if [ "${MIN:-0}" -ge 1 ] 2>/dev/null; then
+  ok "min-instances=$MIN — warm for judges"
+else
+  warn "min-instances=0 — cheap, but first visitor waits on a cold start."
+  printf "      before submitting: %s\n" "./scripts/warm.sh on"
+fi
 
 # ------------------------------------------------------------- substrate ---
 hd "substrate"

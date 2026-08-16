@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { API } from "@/lib/api";
+import { usePoll } from "@/lib/usePoll";
 
 /**
  * The chaos panel. We hand this to the judge.
@@ -42,11 +43,7 @@ export default function Drill() {
     } catch {}
   }
 
-  useEffect(() => {
-    poll();
-    const t = setInterval(poll, 2000);
-    return () => clearInterval(t);
-  }, []);
+  usePoll(poll, 2500);
 
   async function seedAndDispatch() {
     setBusy("dispatch");

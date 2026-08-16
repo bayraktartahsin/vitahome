@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { API } from "@/lib/api";
+import { usePoll } from "@/lib/usePoll";
 
 /**
  * Clinician console — dense dark. An ops room.
@@ -83,11 +84,7 @@ export default function Console() {
     setAudit(a.audit ?? []);
   }, []);
 
-  useEffect(() => {
-    poll();
-    const t = setInterval(poll, 2500);
-    return () => clearInterval(t);
-  }, [poll, PID]);
+  usePoll(poll, 4000);
 
   async function post(path: string, body?: unknown, label = "working") {
     setBusy(label);

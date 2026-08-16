@@ -66,6 +66,17 @@ def health_deep():
 
 # -------------------------------------------------------------- registry ----
 
+@app.get("/usage")
+def usage():
+    """What the model calls actually cost, in tokens.
+
+    Counted rather than estimated, for the same reason the Autonomy Ledger
+    counts actions instead of guessing at savings: a number nobody can check is
+    worth less than no number at all.
+    """
+    return gemini.usage_report()
+
+
 @app.get("/registry")
 def get_registry():
     """A2A agent cards. The Fleet track's 'agent registry' requirement, at a URL."""

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { API } from "@/lib/api";
+import { usePoll } from "@/lib/usePoll";
 
 /**
  * The scale view — 3:20 in the demo.
@@ -47,11 +48,7 @@ export default function Fleets() {
     }
   }, []);
 
-  useEffect(() => {
-    poll();
-    const t = setInterval(poll, 2000);
-    return () => clearInterval(t);
-  }, [poll]);
+  usePoll(poll, 4000);
 
   async function post(path: string, label: string, msg: string) {
     setBusy(label);

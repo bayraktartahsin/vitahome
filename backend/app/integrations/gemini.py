@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 from typing import Any
 
@@ -101,8 +102,49 @@ def generate_json(
         "inputTokens": getattr(usage, "prompt_token_count", None),
         "outputTokens": getattr(usage, "candidates_token_count", None),
     }
-    log.info("gemini model=%s ms=%s", mdl, ms)
+    _meter(mdl, meta["inputTokens"], meta["outputTokens"])
+    log.info("gemini model=%s ms=%s in=%s out=%s",
+             mdl, ms, meta["inputTokens"], meta["outputTokens"])
     return parsed, meta
+
+
+# --------------------------------------------------------------------------
+# usage meter
+# --------------------------------------------------------------------------
+# Counting tokens rather than guessing dollars, for the same reason the Autonomy
+# Ledger counts actions rather than estimating savings: a number nobody can
+# check is worth less than no number. Rates change; token counts are facts the
+# API reported.
+
+_usage_lock = threading.Lock()
+_usage: dict[str, dict[str, int]] = {}
+
+
+def _meter(model: str, tin: int | None, tout: int | None) -> None:
+    with _usage_lock:
+        u = _usage.setdefault(model, {"calls": 0, "inputTokens": 0, "outputTokens": 0})
+        u["calls"] += 1
+        u["inputTokens"] += int(tin or 0)
+        u["outputTokens"] += int(tout or 0)
+
+
+def usage_report() -> dict[str, Any]:
+    """Per-model totals since this instance started.
+
+    Per-instance on purpose: it is a sanity check on what a demo run costs, not
+    an accounting system. Cloud Billing is the source of truth for the bill.
+    """
+    with _usage_lock:
+        by_model = {m: dict(v) for m, v in _usage.items()}
+    return {
+        "byModel": by_model,
+        "totals": {
+            "calls": sum(v["calls"] for v in by_model.values()),
+            "inputTokens": sum(v["inputTokens"] for v in by_model.values()),
+            "outputTokens": sum(v["outputTokens"] for v in by_model.values()),
+        },
+        "note": "tokens since this instance started — not dollars, and not billing",
+    }
 
 
 def ping() -> dict[str, Any]:
