@@ -20,6 +20,14 @@ class _Ledger:
         self.events: list[tuple[str, str]] = []
 
     # --- surface used by runtime ---
+    SETTLED = {"done", "refused", "escalated", "resolved"}
+
+    def peek(self, pid, task_id):
+        return None                      # not yet started, unless overridden
+
+    def audit(self, pid, kind, actor, detail, task_id=None, extra=None):
+        pass
+
     def claim(self, pid, task_id, worker):
         return {"attempt": self.attempt, "agent": "scheduler", "error": "boom"}
 
@@ -112,3 +120,71 @@ def test_attempt_ceiling_allows_normal_retries(monkeypatch):
     out = runtime.run_task("scheduler", "p", "t", lambda *_: "recovered")
     assert out["status"] == "done"
     assert out["attempt"] == 2
+
+
+# --------------------------------------------------------------------------
+# Redelivery of finished work
+# --------------------------------------------------------------------------
+
+class _SettledLedger(_Ledger):
+    """A ledger whose task is already in a terminal state."""
+
+    SETTLED = {"done", "refused", "escalated", "resolved"}
+
+    def __init__(self, status: str, attempt: int = 3):
+        super().__init__(attempt=attempt)
+        self.status = status
+        self.claimed = False
+        self.audits: list[tuple] = []
+
+    def peek(self, pid, task_id):
+        return {"status": self.status, "attempt": self.attempt, "agent": "scheduler"}
+
+    def claim(self, pid, task_id, worker):
+        self.claimed = True
+        return super().claim(pid, task_id, worker)
+
+    def audit(self, pid, kind, actor, detail, task_id=None, extra=None):
+        self.audits.append((kind, detail))
+
+
+@pytest.mark.parametrize("status", ["done", "refused", "escalated", "resolved"])
+def test_a_redelivery_after_settling_does_no_work(monkeypatch, status):
+    """At-least-once delivery means duplicates are routine. A settled task must
+    be acked untouched — never claimed, never re-run."""
+    led = _SettledLedger(status)
+    monkeypatch.setattr(runtime, "ledger", led)
+    ran = []
+    out = runtime.run_task("scheduler", "p", "t", lambda *_: ran.append(1) or "x")
+
+    assert out["status"] == f"already_{status}"
+    assert not led.claimed, "a settled task was claimed, which resurrects it"
+    assert ran == [], "the agent body re-ran on a settled task"
+
+
+def test_the_duplicate_delivery_is_visible_in_the_audit_trail(monkeypatch):
+    """Silently swallowing duplicates hides how often they happen."""
+    led = _SettledLedger("done")
+    monkeypatch.setattr(runtime, "ledger", led)
+    runtime.run_task("scheduler", "p", "t", lambda *_: "x")
+    assert any("already done" in d for _, d in led.audits)
+
+
+def test_a_completed_task_can_never_dead_letter_itself(monkeypatch):
+    """The actual defect. A finished task redelivered past the attempt ceiling
+    walked its own counter up and escalated as "failed 6 times", with all its
+    steps sitting there completed."""
+    led = _SettledLedger("done", attempt=settings.max_attempts + 5)
+    monkeypatch.setattr(runtime, "ledger", led)
+    out = runtime.run_task("scheduler", "p", "t", lambda *_: "x")
+
+    assert out["status"] == "already_done"
+    assert not any(e[0] == "escalate" for e in led.events), \
+        "a successful task was dead-lettered into the clinician queue"
+
+
+def test_an_unstarted_task_is_still_claimed_normally(monkeypatch):
+    led = _SettledLedger("pending", attempt=1)
+    monkeypatch.setattr(runtime, "ledger", led)
+    runtime.run_task("scheduler", "p", "t", lambda *_: "booked")
+    assert led.claimed

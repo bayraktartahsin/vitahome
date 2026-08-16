@@ -95,7 +95,8 @@ def db(monkeypatch):
     fake = _Db()
     monkeypatch.setattr(ledger, "firestore", _FakeFirestore)
     monkeypatch.setattr(ledger, "db", lambda: fake)
-    monkeypatch.setattr(ledger, "bump_ledger", lambda pid, f: fake.bumps.append(f))
+    monkeypatch.setattr(ledger, "bump_ledger",
+                        lambda pid, f, by=1: fake.bumps.append(f if by > 0 else f"-{f}"))
     return fake
 
 
@@ -205,21 +206,22 @@ def test_handing_over_is_not_the_same_as_a_human_deciding(db):
     "escalated" must mean waiting and "closed by a human" must mean a named
     person acted. Collapsing them puts a number up that is not true yet."""
     ledger.escalate("p", "t1", "escalator", "chest pain")
-    assert db.bumps == ["escalated"], "an escalation counted as a human decision"
+    assert db.bumps == ["escalated", "openExceptions"], \
+        "an escalation counted as a human decision"
 
 
 def test_a_human_closing_an_escalation_counts_as_a_human_decision(db):
     _escalated(db)
     db.bumps.clear()
     ledger.resolve_escalation("p", "t", "Dr. Chen")
-    assert db.bumps == ["humanDecisions"]
+    assert db.bumps == ["humanDecisions", "-openExceptions"]
 
 
 def test_deciding_a_refusal_counts_as_a_human_decision(db):
     _refused(db)
     db.bumps.clear()
     ledger.decide_refusal("p", "t", "Dr. Chen", "Discontinue amlodipine")
-    assert db.bumps == ["humanDecisions"]
+    assert db.bumps == ["humanDecisions", "-openExceptions"]
 
 
 def test_both_human_actions_name_the_human_in_the_audit_trail(db):

@@ -14,17 +14,19 @@ Built for the **All Things Agentic Hackathon** · track: **The Fortified Enterpr
 
 ## The fleet
 
-| | Agent | Verb | Duty | Status |
-|---|---|---|---|---|
-| 📄 | **Parser** | reads | Document → structured plan; re-ranks every instruction by how dangerous it is to miss | **live** |
-| 💊 | **Reconciler** | checks | New meds vs. the FHIR record; finds contradictions and refuses to resolve them | **live** |
-| 📅 | **Scheduler** | books | Every follow-up appointment, autonomously, into a real FHIR store | **live** |
-| 👁 | **Watchman** | watches | The red flags named in *this* document | **live** |
-| 🚨 | **Escalator** | calls a human | The only path to a clinical decision — and the only agent that may decline | **live** |
-| 🏥 | **Pharmacist** | sends | Routes prescriptions, builds the dose schedule | registered, not implemented |
-| 🗣 | **Coach** | checks in | One adaptive question a day, by voice | registered, not implemented |
+| | Agent | Verb | Duty |
+|---|---|---|---|
+| 📄 | **Parser** | reads | Document → structured plan; re-ranks every instruction by how dangerous it is to miss |
+| 💊 | **Reconciler** | checks | New meds vs. the FHIR record; finds contradictions and refuses to resolve them |
+| 📅 | **Scheduler** | books | Every follow-up appointment, autonomously, into a real FHIR store |
+| 🏥 | **Pharmacist** | sends | Turns "twice daily for 12 months" into an actual clock; never invents a time |
+| 👁 | **Watchman** | watches | The red flags named in *this* document — nothing generic |
+| 🗣 | **Coach** | checks in | One question a day, chosen from what the fleet does not know |
+| 🚨 | **Escalator** | calls a human | The only path to a clinical decision — and the only agent that may decline |
 
-All seven are published as A2A agent cards at [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry). Two of them currently park their tasks and say so in the audit trail rather than pretending to work.
+All seven are live and published as A2A agent cards at [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry).
+
+**Four of them can refuse.** That is not a failure path. The Reconciler refuses a medication contradiction, the Pharmacist refuses a dosage it cannot schedule without guessing, the Coach declines to send a check-in with nothing to learn, and the Escalator declines to wake a clinician who is not needed. Each refusal hands a human a decision with the options already assembled.
 
 **The thesis is calibrated non-autonomy.** In a regulated domain the interesting question isn't how much a fleet does alone — it's how precisely it knows when *not* to. VitaHome executes the mechanical and refuses the clinical.
 
@@ -122,7 +124,7 @@ cd web && npm install && npm run dev
 
 **In use today:** Gemini 3.5 Flash-Lite (extraction) · Gemini 3.7 Flash (judgement) · Agent Development Kit · A2A agent cards · **Cloud Healthcare API (FHIR R4)** · Cloud Run · Firestore · Pub/Sub · Cloud Scheduler · Secret Manager · Cloud Build.
 
-**Planned, not yet shipped:** Gemini TTS (voice check-ins), Gemma 4 (PHI redaction before logs), Veo 3.1 (personalised instruction clips), Cloud Tasks, Cloud Trace. They are named here because they are on the roadmap, not because they are running.
+**Planned, not yet shipped:** Gemini TTS (the Coach asks in text today, not voice), Gemma 4 (PHI redaction before logs), Veo 3.1 (personalised instruction clips), Cloud Tasks, Cloud Trace. They are named here because they are on the roadmap, not because they are running.
 
 Model tiers were chosen from measurements on this project's own prompts, not from a datasheet — Flash-Lite for structured extraction on the hot path, Flash for the two places the model is asked to exercise judgement (ambiguity, escalate-or-not), where the extra ~1.3s buys something.
 

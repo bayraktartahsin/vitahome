@@ -7,6 +7,7 @@ step" still cannot produce a duplicate.
 """
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import google.auth
@@ -18,17 +19,35 @@ from ..config import settings
 IDEM_SYSTEM = "https://vitahome.dev/idempotency-key"
 
 _creds = None
+_creds_lock = threading.Lock()
 
 
 def _token() -> str:
+    """Return a valid access token, safely under concurrency.
+
+    The lock is not paranoia. Without it, several threads that all observe an
+    expired credential call ``refresh()`` at the same time, and one of them
+    reads ``_creds.token`` while another is midway through swapping it — which
+    surfaces as a 401 from a request that had every right to succeed.
+
+    That is exactly what happened seeding two hundred cohort patients across
+    sixteen threads: 189 succeeded and 11 came back 401. It is not specific to
+    seeding — agents run concurrently on Cloud Run, so this was a live defect
+    that happened to need volume to show itself.
+
+    Holding the lock across the refresh also collapses sixteen simultaneous
+    refreshes into one. It is contended only while a token is actually being
+    renewed, which is roughly hourly.
+    """
     global _creds
-    if _creds is None:
-        _creds, _ = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/cloud-platform"]
-        )
-    if not _creds.valid:
-        _creds.refresh(google.auth.transport.requests.Request())
-    return _creds.token
+    with _creds_lock:
+        if _creds is None:
+            _creds, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+        if not _creds.valid:
+            _creds.refresh(google.auth.transport.requests.Request())
+        return _creds.token
 
 
 def _headers() -> dict[str, str]:
@@ -42,7 +61,7 @@ def _headers() -> dict[str, str]:
 def search(resource_type: str, params: dict[str, str]) -> list[dict[str, Any]]:
     r = httpx.get(f"{settings.fhir_base}/{resource_type}",
                   headers=_headers(), params=params, timeout=20.0)
-    r.raise_for_status()
+    _raise_for_outcome(r, resource_type)
     bundle = r.json()
     return [e["resource"] for e in bundle.get("entry", [])]
 
@@ -111,7 +130,7 @@ def update(resource_type: str, rid: str, body: dict[str, Any]) -> dict[str, Any]
 def read(resource_type: str, rid: str) -> dict[str, Any]:
     r = httpx.get(f"{settings.fhir_base}/{resource_type}/{rid}",
                   headers=_headers(), timeout=20.0)
-    r.raise_for_status()
+    _raise_for_outcome(r, resource_type)
     return r.json()
 
 

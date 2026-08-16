@@ -34,6 +34,10 @@ TaskStatus = Literal["pending", "leased", "done", "refused", "escalated", "faile
 TERMINAL = frozenset({"done", "refused", "escalated"})
 """States a task never leaves. ``failed`` is deliberately absent — a failed task
 is expected to be redelivered and retried."""
+
+SETTLED = TERMINAL | {"resolved"}
+"""Terminal, plus the state a human leaves behind after closing one. Nothing
+should ever pick a settled task up again."""
 AuditKind = Literal[
     "heartbeat", "action", "AGENT_DOWN", "redelivery",
     "skip", "refusal", "escalation", "access", "lease",
@@ -102,6 +106,13 @@ def create_task(pid: str, agent: str, instruction_id: str | None = None,
     })
     audit(pid, "action", agent, f"task created ({agent})", task_id)
     return task_id
+
+
+def peek(pid: str, task_id: str) -> dict[str, Any] | None:
+    """Read a task without touching it. Used to spot an already-settled task
+    before claiming would resurrect it."""
+    snap = task_ref(pid, task_id).get()
+    return snap.to_dict() if snap.exists else None
 
 
 def claim(pid: str, task_id: str, worker_id: str) -> dict[str, Any]:
@@ -262,6 +273,7 @@ def refuse(pid: str, task_id: str, agent: str, reason: str,
         return
     audit(pid, "refusal", agent, f"declined to act — {reason}", task_id)
     bump_ledger(pid, "refused")
+    bump_ledger(pid, "openExceptions")
 
 
 def escalate(pid: str, task_id: str, agent: str, trigger: str,
@@ -279,6 +291,7 @@ def escalate(pid: str, task_id: str, agent: str, trigger: str,
     # and the whole point of this ledger is that every figure on it survives
     # being checked.
     bump_ledger(pid, "escalated")
+    bump_ledger(pid, "openExceptions")
 
 
 def resolve_escalation(pid: str, task_id: str, actor: str, note: str = "") -> dict[str, Any]:
@@ -311,6 +324,7 @@ def resolve_escalation(pid: str, task_id: str, actor: str, note: str = "") -> di
     audit(pid, "action", actor, f"escalation closed by {actor}" + (f" — {note}" if note else ""),
           task_id, {"humanResolved": True, "elapsedSeconds": elapsed})
     bump_ledger(pid, "humanDecisions")
+    bump_ledger(pid, "openExceptions", -1)
     return {"taskId": task_id, "resolvedBy": actor, "elapsedSeconds": elapsed}
 
 
@@ -342,6 +356,7 @@ def decide_refusal(pid: str, task_id: str, actor: str, option: str) -> dict[str,
     audit(pid, "action", actor, f"{actor} decided: {option}", task_id,
           {"humanDecision": True, "question": ref_data.get("reason")})
     bump_ledger(pid, "humanDecisions")
+    bump_ledger(pid, "openExceptions", -1)
     return {"taskId": task_id, "decidedBy": actor, "decision": option}
 
 
@@ -355,7 +370,7 @@ def fail(pid: str, task_id: str, agent: str, err: str) -> None:
 # --------------------------------------------------------------------------
 
 LedgerField = Literal["autonomous", "escalated", "refused", "humanDecisions",
-                      "systemsTouched"]
+                      "systemsTouched", "openExceptions"]
 """What the ledger counts, and the distinction that matters:
 
   autonomous      the fleet finished it, no human involved
@@ -363,12 +378,15 @@ LedgerField = Literal["autonomous", "escalated", "refused", "humanDecisions",
   refused         the fleet would not choose; a human was handed the options
   humanDecisions  a named person actually decided or closed something
   systemsTouched  writes to real external systems
+  openExceptions  currently waiting on a human — goes up and down, unlike the
+                  rest. This is what the fleet grid sorts two hundred patients
+                  by, so it has to be a live number rather than a total.
 """
 
 
-def bump_ledger(pid: str, field: LedgerField) -> None:
+def bump_ledger(pid: str, field: LedgerField, by: int = 1) -> None:
     db().collection("ledger").document(pid).set(
-        {field: firestore.Increment(1), "updatedAt": _now()}, merge=True
+        {field: firestore.Increment(by), "updatedAt": _now()}, merge=True
     )
 
 
@@ -381,4 +399,7 @@ def read_ledger(pid: str) -> dict[str, int]:
         "refused": int(d.get("refused", 0)),
         "humanDecisions": int(d.get("humanDecisions", 0)),
         "systemsTouched": int(d.get("systemsTouched", 0)),
+        # Never let a decrement race below zero — a queue showing "-1 waiting"
+        # discredits every other number next to it.
+        "openExceptions": max(0, int(d.get("openExceptions", 0))),
     }

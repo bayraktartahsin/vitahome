@@ -95,6 +95,26 @@ class _Heartbeat:
 
 def run_task(agent: str, pid: str, task_id: str, body: AgentBody) -> dict[str, Any]:
     """Execute one agent task under full lifecycle supervision."""
+    # A redelivery of work that already finished is a no-op: ack it and stop.
+    #
+    # This has to happen BEFORE claiming, because claim() unconditionally sets
+    # the task back to "leased" and bumps its attempt counter. A finished task
+    # redelivered enough times therefore walked its own counter past the poison
+    # ceiling and dead-lettered itself — arriving in the clinician's queue
+    # labelled "failed 6 times" with all three of its steps sitting there
+    # completed. Ten fleets did exactly that during a 200-task burst.
+    #
+    # At-least-once delivery means duplicates are expected, not exceptional. The
+    # step ledger already makes the side effects safe; this makes the lifecycle
+    # safe too.
+    settled = ledger.peek(pid, task_id)
+    if settled and settled.get("status") in ledger.SETTLED:
+        status = settled["status"]
+        ledger.audit(pid, "skip", agent,
+                     f"redelivered after the task was already {status} — acked, nothing re-run",
+                     task_id, {"duplicateDelivery": True})
+        return {"status": f"already_{status}", "attempt": settled.get("attempt")}
+
     task = ledger.claim(pid, task_id, WORKER_ID)
     attempt = task.get("attempt", 1)
     log.info("agent=%s pid=%s task=%s attempt=%s worker=%s",

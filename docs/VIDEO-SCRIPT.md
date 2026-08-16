@@ -285,15 +285,42 @@ demo one thing instead of five features.)*
 
 **SET UP**
 
-> One patient is a demo. Here is the clinician console.
+> One patient is a demo.
 
-**WATCH** *(200 fleets. Exception queue. SLA timers.)*
+**WATCH** *(open `/console/fleets`. Silence.)*
 
 **PAY OFF**
 
-> Two hundred concurrent patient fleets, one clinician. Sorted by what needs a
-> human, not by what arrived last.
+> Two hundred fleets, one clinician. Grey is idle, green is working, amber is
+> waiting on a person — and the queue underneath is sorted by who is waiting,
+> never by who arrived.
+
+**SET UP** *(pre-empt the obvious suspicion, before anyone has to ask)*
+
+> Now, two hundred coloured squares is the easiest thing in the world to fake.
+> So let me hand all two hundred of them real work.
+
+**WATCH** *(`hand work to all 200`. Silence — let the grid turn over.)*
+
+**PAY OFF**
+
+> Every one of those is a real FHIR Patient in the Healthcare API, a real
+> Firestore fleet, a real Pub/Sub message, and a real appointment written to a
+> managed clinical store. The colour is computed from that fleet's own counters
+> — click any square and the fleet behind it is there.
 >
+> That is affordable because the Scheduler makes no model call at all. It
+> resolves a provider and writes to FHIR. Two hundred of those costs a couple of
+> hundred database writes, not tokens.
+>
+> And watch it drain rather than spike — this service is capped at four
+> instances, so the work queues. I could raise the cap; I would rather you see
+> the real behaviour of the thing I actually deployed.
+>
+> The patients are synthetic. The infrastructure is not.
+
+**SET UP**
+
 > And nothing in here is cardiac.
 
 **WATCH** *(photograph a pediatric vaccine schedule — 15 seconds)*

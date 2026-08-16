@@ -21,6 +21,12 @@ Two ways to pull the trigger:
 
 Nothing here simulates a failure. ``os._exit(1)`` skips atexit handlers, buffered
 writes and graceful shutdown. It is exactly as violent as a real crash.
+
+Note on scaling: the arm lives in Firestore, not in process memory, so it works
+regardless of how many Cloud Run instances are up — whichever worker picks up
+the next task for that agent consumes it and dies. Cloud Run's max-instances was
+held low while kills were hand-timed, to raise the odds of hitting the busy
+container. Arming removed that constraint entirely.
 """
 from __future__ import annotations
 

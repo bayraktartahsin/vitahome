@@ -50,13 +50,19 @@ type Audit = {
   taskId?: string;
 };
 
-const PID = "p_hero";
-
 export default function Console() {
+  // Read from the URL rather than useSearchParams: that hook forces the whole
+  // page into a Suspense boundary in the app router, and this is one string.
+  const [PID, setPID] = useState("p_hero");
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [exceptions, setExceptions] = useState<Exception[]>([]);
   const [audit, setAudit] = useState<Audit[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search).get("patient");
+    if (p) setPID(p);
+  }, []);
 
   const poll = useCallback(async () => {
     const grab = async <T,>(p: string, fb: T): Promise<T> => {
@@ -81,7 +87,7 @@ export default function Console() {
     poll();
     const t = setInterval(poll, 2500);
     return () => clearInterval(t);
-  }, [poll]);
+  }, [poll, PID]);
 
   async function post(path: string, body?: unknown, label = "working") {
     setBusy(label);
@@ -105,11 +111,16 @@ export default function Console() {
             ← VitaHome
           </Link>
           <div className="font-mono text-con-ink2">
-            clinician console · Robert Hayes · post-PCI day 3
+            {PID === "p_hero" ? "Robert Hayes · post-PCI day 3" : PID}
           </div>
-          <Link href="/console/drill" className="text-con-danger hover:underline">
-            chaos panel →
-          </Link>
+          <div className="flex gap-4">
+            <Link href="/console/fleets" className="text-con-ink2 hover:text-con-ink">
+              all fleets
+            </Link>
+            <Link href="/console/drill" className="text-con-danger hover:underline">
+              chaos panel →
+            </Link>
+          </div>
         </div>
       </div>
 

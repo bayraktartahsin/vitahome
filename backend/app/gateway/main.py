@@ -16,21 +16,26 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import threading
+import time
 
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
+from ..agents import coach as coach_agent
 from ..agents import escalator as escalator_agent
 from ..agents import parser as parser_agent
+from ..agents import pharmacist as pharmacist_agent
 from ..agents import reconciler as reconciler_agent
 from ..agents import scheduler as scheduler_agent
 from ..agents import watchman as watchman_agent
 from ..config import settings
 from ..fleet import chaos, dispatch, ledger, registry, runtime, supervisor
 from ..integrations import fhir, gemini
-from ..sim import hero_patient, vitals
+from ..sim import cohort, hero_patient, vitals
 
 logging.basicConfig(level=settings.log_level)
 log = logging.getLogger("vitahome")
@@ -212,6 +217,36 @@ def get_exceptions(pid: str):
             "breached": sum(1 for r in out if r["breached"])}
 
 
+class CheckInAnswer(BaseModel):
+    answer: str
+
+
+@app.post("/patient/{pid}/checkin/answer")
+def answer_checkin(pid: str, req: CheckInAnswer):
+    """The family answers today's question.
+
+    The answer does not come back to the Coach. It goes to the Watchman, which
+    is the component that knows this document's red flags — the Coach asks, it
+    does not judge. That keeps a single place responsible for deciding whether
+    something reported at home matters.
+    """
+    ref = ledger.db().collection("patients").document(pid)
+    doc = ref.get().to_dict() or {}
+    open_q = doc.get("openCheckIn") or {}
+    if not open_q or open_q.get("answer"):
+        raise HTTPException(409, "no open check-in for this patient")
+
+    ref.set({"openCheckIn": {**open_q, "answer": req.answer}}, merge=True)
+    task_id = dispatch.dispatch(pid, "watchman", None, {
+        "observation": f"Asked: {open_q['question']}  Answered: {req.answer}",
+        "context": f"daily check-in about {open_q.get('about')}",
+        "source": "coach check-in",
+    })
+    ledger.audit(pid, "action", "coach",
+                 f"answer received on {open_q.get('about')} — routed to the Watchman", task_id)
+    return {"routedTo": "watchman", "taskId": task_id, "about": open_q.get("about")}
+
+
 @app.get("/patient/{pid}/audit")
 def get_audit(pid: str, limit: int = 200):
     from google.cloud import firestore as fs
@@ -234,7 +269,9 @@ def _decode_push(envelope: dict) -> dict:
 HANDLERS = {
     "scheduler": scheduler_agent.body,
     "reconciler": reconciler_agent.body,
+    "pharmacist": pharmacist_agent.body,
     "watchman": watchman_agent.body,
+    "coach": coach_agent.body,
     "escalator": escalator_agent.body,
 }
 
@@ -261,7 +298,15 @@ async def agent_endpoint(agent: str, request: Request):
         ledger.audit(pid, "action", agent, f"{agent} not yet implemented — task parked", task_id)
         return {"status": "unimplemented", "agent": agent, "taskId": task_id}
 
-    return runtime.run_task(agent, pid, task_id, handler)
+    # run_task is entirely blocking — FHIR round trips, Gemini calls, Firestore
+    # writes, and the drill's deliberate sleep. Calling it directly from an
+    # async handler blocks the event loop for the whole task, so the instance
+    # serves nothing else until the agent finishes.
+    #
+    # Found by watching the console go dark for 165 seconds during a 200-task
+    # burst: the dashboard was not slow, it was never scheduled. Handing the
+    # work to the threadpool keeps the loop free to answer everything else.
+    return await run_in_threadpool(runtime.run_task, agent, pid, task_id, handler)
 
 
 # ------------------------------------------------------------------ demo ----
@@ -407,16 +452,112 @@ def supervisor_scan():
 
 # --------------------------------------------------------------- console ----
 
+# The grid polls every couple of seconds and costs ~450 Firestore reads a call.
+# One recomputation per window, shared by every poller, is plenty for a
+# dashboard — and it keeps the burst screen cheap while the fleet is busy.
+_FLEETS_TTL = 2.0
+_fleets_cache: dict[str, Any] = {"at": 0.0, "data": None, "limit": 0}
+_fleets_lock = threading.Lock()
+
+
 @app.get("/console/fleets")
 def console_fleets(limit: int = 250):
-    pts = ledger.db().collection("patients").limit(limit).stream()
+    now = time.monotonic()
+    with _fleets_lock:
+        if (_fleets_cache["data"] is not None
+                and _fleets_cache["limit"] == limit
+                and now - _fleets_cache["at"] < _FLEETS_TTL):
+            return _fleets_cache["data"]
+    data = _compute_fleets(limit)
+    with _fleets_lock:
+        _fleets_cache.update({"at": time.monotonic(), "data": data, "limit": limit})
+    return data
+
+
+def _compute_fleets(limit: int):
+    """Every fleet, with state derived from its actual counters.
+
+    Two queries for the whole grid — the patient documents and the ledger
+    collection — rather than a subcollection scan per patient, which at two
+    hundred fleets would be two hundred round trips and a console that takes
+    ten seconds to paint.
+
+    Nothing here is decorative. A fleet reads "idle" because it genuinely has
+    had no work, not because a seed value said so.
+    """
+    counters = {c.id: (c.to_dict() or {})
+                for c in ledger.db().collection("ledger").limit(limit + 50).stream()}
     out = []
-    for p in pts:
+    for p in ledger.db().collection("patients").limit(limit).stream():
         d = p.to_dict() or {}
-        out.append({"id": p.id,
-                    "name": (d.get("profile") or {}).get("name", p.id),
-                    "state": d.get("fleetState", "idle")})
-    return {"fleets": out, "count": len(out)}
+        c = counters.get(p.id, {})
+        waiting = max(0, int(c.get("openExceptions", 0)))
+        acted = int(c.get("autonomous", 0)) + int(c.get("systemsTouched", 0))
+        out.append({
+            "id": p.id,
+            "name": (d.get("profile") or {}).get("name", p.id),
+            "condition": (d.get("profile") or {}).get("condition"),
+            "cohort": bool(d.get("cohort")),
+            "waiting": waiting,
+            "autonomous": int(c.get("autonomous", 0)),
+            # needs_human > active > idle. The grid sorts on this, and a
+            # clinician's eye should land on the queue, not the busiest fleet.
+            "state": "needs_human" if waiting else ("active" if acted else "idle"),
+        })
+    out.sort(key=lambda f: (-f["waiting"], -f["autonomous"], f["id"]))
+    return {
+        "fleets": out,
+        "count": len(out),
+        "needingHuman": sum(1 for f in out if f["state"] == "needs_human"),
+        "active": sum(1 for f in out if f["state"] == "active"),
+    }
+
+
+@app.post("/demo/cohort")
+def demo_cohort(count: int = 200):
+    """Seed a synthetic cohort. Real FHIR patients, real fleets, idempotent."""
+    if not 1 <= count <= 500:
+        raise HTTPException(400, "count must be between 1 and 500")
+    return cohort.seed(count)
+
+
+@app.post("/demo/storm")
+def demo_storm(count: int = 50, specialty: str = "cardiology"):
+    """Hand real work to ``count`` cohort fleets at once.
+
+    Deliberately the Scheduler: it makes no model call, so a burst costs FHIR
+    writes rather than tokens, and it genuinely exercises Pub/Sub fan-out, Cloud
+    Run concurrency and the lease machinery. That is what the scale screen is
+    claiming, so that is what gets exercised.
+
+    Cloud Run max-instances is 4 here, so a large storm queues rather than
+    scaling out — visible in the console as tasks draining steadily. That is the
+    honest behaviour of the deployment, not a limitation being hidden.
+    """
+    if not 1 <= count <= 250:
+        raise HTTPException(400, "count must be between 1 and 250")
+    pts = [p for p in ledger.db().collection("patients").limit(500).stream()
+           if (p.to_dict() or {}).get("cohort")][:count]
+    if not pts:
+        raise HTTPException(409, "no cohort fleets — POST /demo/cohort first")
+
+    def _one(p) -> bool:
+        plan = ((p.to_dict() or {}).get("carePlan") or {}).get("instructions") or []
+        target = next((i for i in plan if i.get("specialty") == specialty), None) or \
+                 next((i for i in plan if i.get("type") == "followup"), None)
+        if not target:
+            return False
+        dispatch.dispatch(p.id, "scheduler", target["id"],
+                          {"specialty": target["specialty"], "daysOut": target.get("daysOut", 7)})
+        return True
+
+    # Concurrent because each dispatch is a Firestore write plus a Pub/Sub
+    # publish we block on for the message id. Serially that is ~0.4s each, so
+    # two hundred took 82 seconds — an endpoint nobody can call on camera.
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=24) as pool:
+        dispatched = sum(1 for ok in pool.map(_one, pts) if ok)
+    return {"dispatched": dispatched, "fleets": len(pts), "agent": "scheduler"}
 
 
 def run() -> None:
