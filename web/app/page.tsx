@@ -31,6 +31,12 @@ export default function Home() {
             Photograph a document
           </Link>
           <Link
+            href="/today"
+            className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-semibold text-fam-ink transition hover:bg-fam-surface2"
+          >
+            Today&rsquo;s plan
+          </Link>
+          <Link
             href="/console"
             className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-semibold text-fam-ink transition hover:bg-fam-surface2"
           >
