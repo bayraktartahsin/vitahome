@@ -164,7 +164,12 @@ def run_step(pid: str, task_id: str, agent: str, step_name: str,
         return done[step_name].get("result", {})
 
     # 2. Demo-only window that makes the kill reliably land mid-task.
-    if settings.drill_slow_seconds > 0:
+    #    Scoped to ONE named step so the window is predictable on camera and
+    #    normal task duration stays well inside the Pub/Sub ack deadline.
+    if settings.drill_slow_seconds > 0 and step_name == settings.drill_slow_step:
+        audit(pid, "action", agent,
+              f"drill window open on '{step_name}' — {settings.drill_slow_seconds}s to kill me",
+              task_id, {"drillWindow": True})
         time.sleep(settings.drill_slow_seconds)
 
     # 3. Side effect — deliberately OUTSIDE any transaction.

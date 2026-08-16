@@ -22,9 +22,11 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from ..agents import scheduler as scheduler_agent
 from ..config import settings
-from ..fleet import chaos, ledger, registry, supervisor
+from ..fleet import chaos, dispatch, ledger, registry, runtime, supervisor
 from ..integrations import fhir
+from ..sim import hero_patient
 
 logging.basicConfig(level=settings.log_level)
 log = logging.getLogger("vitahome")
@@ -120,20 +122,81 @@ def _decode_push(envelope: dict) -> dict:
     return json.loads(raw)
 
 
+# Agent bodies. Each is a pure function of (patient, task) that calls
+# ledger.run_step for every side effect — lifecycle is handled by the runtime.
+HANDLERS = {
+    "scheduler": scheduler_agent.body,
+}
+
+
 @app.post("/agents/{agent}")
 async def agent_endpoint(agent: str, request: Request):
     """One endpoint per agent; Pub/Sub push subscriptions target these.
 
-    Returning 200 acks the message. Returning 5xx (or dying) leaves it unacked,
-    which is exactly what makes the Failure Drill recover: Pub/Sub redelivers.
+    Returning 200 acks the message. Returning 5xx — or dying mid-request —
+    leaves it unacked, and that redelivery is exactly how the Failure Drill
+    recovers. We do not catch-and-swallow: failures must propagate.
     """
     if agent not in AGENT_NAMES:
         raise HTTPException(404, "unknown agent")
+
     envelope = await request.json()
     body = _decode_push(envelope) if "message" in envelope else envelope
-    log.info("agent=%s task=%s attempt=%s", agent, body.get("taskId"), body.get("attempt"))
-    # Day 6-11 wire the real handlers here.
-    return {"status": "stub", "agent": agent, "received": body}
+    pid, task_id = body.get("patientId"), body.get("taskId")
+    if not pid or not task_id:
+        raise HTTPException(400, "patientId and taskId required")
+
+    handler = HANDLERS.get(agent)
+    if handler is None:
+        ledger.audit(pid, "action", agent, f"{agent} not yet implemented — task parked", task_id)
+        return {"status": "unimplemented", "agent": agent, "taskId": task_id}
+
+    return runtime.run_task(agent, pid, task_id, handler)
+
+
+# ------------------------------------------------------------------ demo ----
+
+@app.post("/demo/seed")
+def demo_seed():
+    """Create the synthetic hero patient in FHIR + Firestore. Idempotent."""
+    return hero_patient.seed()
+
+
+class DispatchRequest(BaseModel):
+    patientId: str = "p_hero"
+    agent: str = "scheduler"
+    instructionId: str | None = None
+    payload: dict = {}
+
+
+@app.post("/demo/dispatch")
+def demo_dispatch(req: DispatchRequest):
+    """Hand a task to the fleet over Pub/Sub."""
+    if req.agent not in AGENT_NAMES:
+        raise HTTPException(404, "unknown agent")
+    task_id = dispatch.dispatch(req.patientId, req.agent, req.instructionId, req.payload)
+    return {"taskId": task_id, "agent": req.agent, "patientId": req.patientId}
+
+
+@app.post("/demo/book-followups")
+def demo_book_followups(patientId: str = "p_hero"):
+    """Dispatch a Scheduler task for every follow-up on the care plan."""
+    snap = ledger.db().collection("patients").document(patientId).get()
+    if not snap.exists:
+        raise HTTPException(404, "seed the patient first: POST /demo/seed")
+    d = snap.to_dict() or {}
+    fhir_pid = (d.get("profile") or {}).get("fhirPatientId")
+    out = []
+    for ins in (d.get("carePlan") or {}).get("instructions", []):
+        if ins.get("type") == "followup":
+            tid = dispatch.dispatch(patientId, "scheduler", ins["id"], {
+                "specialty": ins.get("specialty"),
+                "daysOut": ins.get("daysOut", 7),
+                "fhirPatientId": fhir_pid,
+            })
+            out.append({"instruction": ins["id"], "taskId": tid,
+                        "specialty": ins.get("specialty")})
+    return {"dispatched": out, "count": len(out)}
 
 
 # ------------------------------------------------------------ the drill ----
