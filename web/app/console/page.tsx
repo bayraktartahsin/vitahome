@@ -20,8 +20,9 @@ import { API } from "@/lib/api";
 
 type Ledger = {
   autonomous: number;
-  humanDecisions: number;
+  escalated: number;
   refused: number;
+  humanDecisions: number;
   systemsTouched: number;
 };
 
@@ -114,14 +115,17 @@ export default function Console() {
 
       <div className="mx-auto max-w-7xl px-6 py-8">
         {/* ---------------------------------------------------- ledger --- */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat label="autonomous actions" value={ledger?.autonomous} tone="accent" />
-          <Stat label="human decisions" value={ledger?.humanDecisions} tone="info" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Stat label="done autonomously" value={ledger?.autonomous} tone="accent" />
           <Stat label="refused (ambiguous)" value={ledger?.refused} tone="refuse" />
-          <Stat label="external systems touched" value={ledger?.systemsTouched} tone="ink" />
+          <Stat label="escalated — awaiting a human" value={ledger?.escalated} tone="warn" />
+          <Stat label="closed by a human" value={ledger?.humanDecisions} tone="info" />
+          <Stat label="external systems written" value={ledger?.systemsTouched} tone="ink" />
         </div>
-        <p className="mt-2 font-mono text-[10px] text-con-ink2">
-          verifiable counts only — no estimated savings, no invented dollars
+        <p className="mt-2 font-mono text-[10px] leading-relaxed text-con-ink2">
+          verifiable counts only — no estimated savings, no invented dollars.
+          &ldquo;escalated&rdquo; means handed over and waiting; it becomes
+          &ldquo;closed by a human&rdquo; only when a named person acts.
         </p>
 
         {/* ------------------------------------------------------ runs --- */}
@@ -211,12 +215,13 @@ function Stat({
 }: {
   label: string;
   value?: number;
-  tone: "accent" | "info" | "refuse" | "ink";
+  tone: "accent" | "info" | "refuse" | "warn" | "ink";
 }) {
   const color = {
     accent: "text-con-accent",
     info: "text-con-info",
     refuse: "text-[#9B7BD1]",
+    warn: "text-con-warn",
     ink: "text-con-ink",
   }[tone];
   return (

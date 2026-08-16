@@ -225,6 +225,21 @@ export default function Capture() {
   );
 }
 
+/**
+ * Display-only tidy-up. The stored text is a faithful quote of the page,
+ * asterisks and list numbering included, because it has to be findable on the
+ * paper in your hand. On screen those artefacts just read as broken markdown,
+ * so they are stripped here and nowhere else.
+ */
+function tidy(text: string) {
+  return text
+    .replace(/\*+/g, "")
+    .replace(/^\s*[-•]\s*/, "")
+    .replace(/^\s*\d+\.\s*/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function Card({ ins }: { ins: Instruction }) {
   const critical = ins.criticality === "CRITICAL";
   const caution = ins.criticality === "caution";
@@ -262,7 +277,7 @@ function Card({ ins }: { ins: Instruction }) {
               critical ? "font-semibold text-fam-ink" : "text-fam-ink"
             }`}
           >
-            {ins.text}
+            {tidy(ins.text)}
           </p>
           {ins.why && (
             <p className="mt-2 border-l-2 border-fam-danger/40 pl-3 text-sm leading-relaxed text-fam-ink2">

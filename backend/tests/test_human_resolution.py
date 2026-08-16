@@ -56,22 +56,46 @@ class _Coll:
         self._s.setdefault(f"{self._p}[]", []).append(data)
 
 
+class _Tx:
+    """Firestore writes through tx.update(ref, data) inside a transaction."""
+
+    def update(self, ref, data):
+        ref.update(data)
+
+
 class _Db:
     def __init__(self):
         self.store = {}
+        self.bumps: list[str] = []
 
     def collection(self, n):
         return _Coll(self.store, n)
 
     def transaction(self):
-        return None
+        return _Tx()
+
+
+class _FakeFirestore:
+    """Stands in for the firestore module inside ledger.py — see
+    test_ledger_terminal.py, where the transactional guard itself is tested."""
+
+    Transaction = object
+
+    class Increment:
+        def __init__(self, value):
+            self.value = value
+
+    @staticmethod
+    def transactional(fn):
+        return lambda tx: fn(tx)
 
 
 @pytest.fixture
 def db(monkeypatch):
     fake = _Db()
+    monkeypatch.setattr(ledger, "firestore", _FakeFirestore)
     monkeypatch.setattr(ledger, "db", lambda: fake)
-    monkeypatch.setattr(ledger, "bump_ledger", lambda *a, **k: None)
+    monkeypatch.setattr(ledger, "bump_ledger", lambda pid, f: fake.bumps.append(f))
     return fake
 
 
@@ -175,6 +199,28 @@ def test_deciding_twice_keeps_the_first_decision(db):
 
 
 # ------------------------------------------------------------------- audit
+
+def test_handing_over_is_not_the_same_as_a_human_deciding(db):
+    """The Autonomy Ledger goes on screen and gets defended out loud, so
+    "escalated" must mean waiting and "closed by a human" must mean a named
+    person acted. Collapsing them puts a number up that is not true yet."""
+    ledger.escalate("p", "t1", "escalator", "chest pain")
+    assert db.bumps == ["escalated"], "an escalation counted as a human decision"
+
+
+def test_a_human_closing_an_escalation_counts_as_a_human_decision(db):
+    _escalated(db)
+    db.bumps.clear()
+    ledger.resolve_escalation("p", "t", "Dr. Chen")
+    assert db.bumps == ["humanDecisions"]
+
+
+def test_deciding_a_refusal_counts_as_a_human_decision(db):
+    _refused(db)
+    db.bumps.clear()
+    ledger.decide_refusal("p", "t", "Dr. Chen", "Discontinue amlodipine")
+    assert db.bumps == ["humanDecisions"]
+
 
 def test_both_human_actions_name_the_human_in_the_audit_trail(db):
     _escalated(db)

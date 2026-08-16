@@ -273,7 +273,12 @@ def escalate(pid: str, task_id: str, agent: str, trigger: str,
     }):
         return
     audit(pid, "escalation", agent, f"escalated to human — {trigger}", task_id)
-    bump_ledger(pid, "humanDecisions")
+    # "escalated", not "humanDecisions". At this moment nobody has decided
+    # anything — the task has been handed over and is waiting. Counting a
+    # handover as a decision would put a number on screen that is not true yet,
+    # and the whole point of this ledger is that every figure on it survives
+    # being checked.
+    bump_ledger(pid, "escalated")
 
 
 def resolve_escalation(pid: str, task_id: str, actor: str, note: str = "") -> dict[str, Any]:
@@ -305,6 +310,7 @@ def resolve_escalation(pid: str, task_id: str, actor: str, note: str = "") -> di
     })
     audit(pid, "action", actor, f"escalation closed by {actor}" + (f" — {note}" if note else ""),
           task_id, {"humanResolved": True, "elapsedSeconds": elapsed})
+    bump_ledger(pid, "humanDecisions")
     return {"taskId": task_id, "resolvedBy": actor, "elapsedSeconds": elapsed}
 
 
@@ -348,8 +354,19 @@ def fail(pid: str, task_id: str, agent: str, err: str) -> None:
 # autonomy ledger — verifiable counts only, never invented dollars
 # --------------------------------------------------------------------------
 
-def bump_ledger(pid: str, field: Literal["autonomous", "humanDecisions", "refused",
-                                         "systemsTouched"]) -> None:
+LedgerField = Literal["autonomous", "escalated", "refused", "humanDecisions",
+                      "systemsTouched"]
+"""What the ledger counts, and the distinction that matters:
+
+  autonomous      the fleet finished it, no human involved
+  escalated       handed to a clinician — waiting, not resolved
+  refused         the fleet would not choose; a human was handed the options
+  humanDecisions  a named person actually decided or closed something
+  systemsTouched  writes to real external systems
+"""
+
+
+def bump_ledger(pid: str, field: LedgerField) -> None:
     db().collection("ledger").document(pid).set(
         {field: firestore.Increment(1), "updatedAt": _now()}, merge=True
     )
@@ -360,7 +377,8 @@ def read_ledger(pid: str) -> dict[str, int]:
     d = snap.to_dict() if snap.exists else {}
     return {
         "autonomous": int(d.get("autonomous", 0)),
-        "humanDecisions": int(d.get("humanDecisions", 0)),
+        "escalated": int(d.get("escalated", 0)),
         "refused": int(d.get("refused", 0)),
+        "humanDecisions": int(d.get("humanDecisions", 0)),
         "systemsTouched": int(d.get("systemsTouched", 0)),
     }

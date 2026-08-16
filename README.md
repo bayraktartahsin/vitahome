@@ -14,15 +14,17 @@ Built for the **All Things Agentic Hackathon** · track: **The Fortified Enterpr
 
 ## The fleet
 
-| | Agent | Verb | Duty |
-|---|---|---|---|
-| 📄 | **Parser** | reads | Document → structured plan; ranks each instruction by how dangerous it is to miss |
-| 💊 | **Reconciler** | checks | New meds vs existing; interactions, duplications, what to stop |
-| 📅 | **Scheduler** | books | Every follow-up appointment, autonomously |
-| 🏥 | **Pharmacist** | sends | Routes prescriptions, builds the dose schedule |
-| 👁 | **Watchman** | watches | The red flags named in *this* document, 24/7 |
-| 🗣 | **Coach** | checks in | One adaptive question a day, by voice |
-| 🚨 | **Escalator** | calls a human | The only path to a clinical decision |
+| | Agent | Verb | Duty | Status |
+|---|---|---|---|---|
+| 📄 | **Parser** | reads | Document → structured plan; re-ranks every instruction by how dangerous it is to miss | **live** |
+| 💊 | **Reconciler** | checks | New meds vs. the FHIR record; finds contradictions and refuses to resolve them | **live** |
+| 📅 | **Scheduler** | books | Every follow-up appointment, autonomously, into a real FHIR store | **live** |
+| 👁 | **Watchman** | watches | The red flags named in *this* document | **live** |
+| 🚨 | **Escalator** | calls a human | The only path to a clinical decision — and the only agent that may decline | **live** |
+| 🏥 | **Pharmacist** | sends | Routes prescriptions, builds the dose schedule | registered, not implemented |
+| 🗣 | **Coach** | checks in | One adaptive question a day, by voice | registered, not implemented |
+
+All seven are published as A2A agent cards at [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry). Two of them currently park their tasks and say so in the audit trail rather than pretending to work.
 
 **The thesis is calibrated non-autonomy.** In a regulated domain the interesting question isn't how much a fleet does alone — it's how precisely it knows when *not* to. VitaHome executes the mechanical and refuses the clinical.
 
@@ -54,6 +56,45 @@ Agents communicate through **Pub/Sub messages and Firestore task documents — n
 | Fleet registry (A2A cards) | [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry) |
 | Substrate health | [`/health/deep`](https://vitahome-gateway-205100594497.us-central1.run.app/health/deep) |
 
+## Break it yourself
+
+The interesting claim is not that it works. It is what happens when it doesn't.
+
+```bash
+./scripts/preflight.sh    # everything that must be green before a live run
+./scripts/drill.sh        # arm an agent, kill it mid-step, watch it recover
+./scripts/monitor.sh both # the escalation, then the decision NOT to escalate
+```
+
+**The Failure Drill.** `/chaos/arm` marks an agent to die inside its next step —
+a real `os._exit(1)`, no cleanup, no graceful shutdown, message left unacked.
+The Pub/Sub message is redelivered, Cloud Run supplies a fresh container (the
+worker ID in the audit trail visibly changes), and the ledger skips every step
+that already completed. One appointment. Not two.
+
+Nothing here is choreographed. There is no exception handler catching the kill;
+the process is simply gone. `/chaos/kill` is the immediate variant — it is
+kept, but it is a poor demo instrument, because on Cloud Run the request often
+lands on an instance that is not the one doing the work. Arming is deterministic
+and no less violent.
+
+The gap the dead worker leaves is never cleaned out of the audit trail. In a
+regulated domain the scar is the evidence.
+
+```
+lease       leased by nj4·f7210a
+AGENT_DOWN  killed mid-step 'resolve_provider' — process exiting without ack
+redelivery  redelivered — attempt 2 (previous worker did not finish)
+lease       leased by nj4·450f78          ← different process
+skip        step 'resolve_provider' already completed — skipped on replay
+```
+
+**Retries do not mask bugs.** A deterministically-failing task would otherwise
+retry forever and starve the fleet, so after five attempts it is dead-lettered
+to the human queue and acked. That guard has already earned its place: a null
+FHIR timestamp was caught by it during development instead of taking the service
+down.
+
 ## Spin up from zero
 
 ```bash
@@ -79,11 +120,26 @@ cd web && npm install && npm run dev
 
 ## Google stack
 
-Gemini 3.7 Flash · Gemini 3.5 Flash-Lite · Gemini TTS · **Gemma 4** (PHI redaction before logs) · **Veo 3.1** (personalised instruction clips) · Agent Development Kit · A2A agent cards · **Cloud Healthcare API (FHIR R4)** · Cloud Run · Firestore · Pub/Sub · Cloud Tasks · Cloud Scheduler · Secret Manager · Cloud Trace.
+**In use today:** Gemini 3.5 Flash-Lite (extraction) · Gemini 3.7 Flash (judgement) · Agent Development Kit · A2A agent cards · **Cloud Healthcare API (FHIR R4)** · Cloud Run · Firestore · Pub/Sub · Cloud Scheduler · Secret Manager · Cloud Build.
+
+**Planned, not yet shipped:** Gemini TTS (voice check-ins), Gemma 4 (PHI redaction before logs), Veo 3.1 (personalised instruction clips), Cloud Tasks, Cloud Trace. They are named here because they are on the roadmap, not because they are running.
+
+Model tiers were chosen from measurements on this project's own prompts, not from a datasheet — Flash-Lite for structured extraction on the hot path, Flash for the two places the model is asked to exercise judgement (ambiguity, escalate-or-not), where the extra ~1.3s buys something.
 
 ## Safety
 
-VitaHome **never diagnoses and never prescribes.** It executes instructions a licensed clinician already wrote. Ambiguity is routed to a human, never guessed. Every action traces to the exact line of the source document that authorised it. PHI lives only in FHIR and Firestore — Pub/Sub messages carry references, and logs pass through Gemma redaction before reaching Cloud Logging. All demo patients are synthetic.
+VitaHome **never diagnoses and never prescribes.** It executes instructions a licensed clinician already wrote. Ambiguity is routed to a human, never guessed. Every instruction carries the line number it came from, so any action can be checked against the paper in your hand.
+
+**The model advises; only code decides.** Gemini flags a medication contradiction — a deterministic branch decides whether that becomes an action or a refusal, and a flagged drug can never be written even if the model also emits a change for it. The Escalator may be overruled by code in exactly one direction: toward paging, never away from it. A model's reassurance cannot suppress a symptom printed on the patient's own return-to-emergency list.
+
+PHI lives only in FHIR and Firestore. Pub/Sub messages carry references, and each agent fetches what it needs inside its own IAM scope. All demo patients are synthetic; there is no real patient data anywhere in this project.
+
+### What is simulated, stated plainly
+
+- **the provider directory** the Scheduler picks from (labelled "provider directory (demo)" in every response)
+- **the home-monitoring feed** — there is no wearable; the reports in `app/sim/vitals.py` are written as a family member would actually send them, and every response is tagged `simulated home monitor`
+
+Everything else touches a real Google Cloud service. FHIR Patients, Appointments, MedicationRequests and Observations are genuine writes to a managed Healthcare API store.
 
 ## Docs
 
