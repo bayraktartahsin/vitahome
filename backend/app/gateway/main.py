@@ -20,7 +20,7 @@ import threading
 import time
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
@@ -32,13 +32,20 @@ from ..agents import pharmacist as pharmacist_agent
 from ..agents import reconciler as reconciler_agent
 from ..agents import scheduler as scheduler_agent
 from ..agents import watchman as watchman_agent
+from ..compliance import redact
 from ..config import settings
 from ..fleet import chaos, dispatch, ledger, registry, runtime, supervisor
 from ..integrations import fhir, gemini
 from ..sim import cohort, hero_patient, vitals
 
+from google.cloud import firestore  # noqa: E402  — used by the console queries
+
 logging.basicConfig(level=settings.log_level)
 log = logging.getLogger("vitahome")
+
+# Installed before any agent runs. PHI is not supposed to reach a log line —
+# this is the layer that catches the day that assumption is wrong.
+redact.install()
 
 app = FastAPI(title="VitaHome Fleet", version=registry.FLEET_VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["*"],
@@ -65,6 +72,67 @@ def health_deep():
 
 
 # -------------------------------------------------------------- registry ----
+
+class ScanRequest(BaseModel):
+    lines: list[str] = []
+    minutes: int = 30
+
+
+@app.post("/compliance/scan")
+def compliance_scan(req: ScanRequest):
+    """Audit log output for PHI that should never have been written.
+
+    The primary control is structural — agents log references, not clinical
+    content — and this is what makes that claim falsifiable rather than a
+    promise in a README. Pass log lines directly, or leave them empty and the
+    gateway reads its own recent Cloud Logging entries.
+    """
+    lines = req.lines
+    if not lines:
+        lines = _recent_log_lines(req.minutes)
+    if not lines:
+        return {"clean": True, "findings": [], "linesScanned": 0,
+                "note": "no log lines available to scan"}
+    try:
+        return {**redact.scan(lines), "redactionsApplied": redact.redaction_counts()}
+    except gemini.ModelError as e:
+        raise HTTPException(502, f"scan failed: {e}") from e
+
+
+def _recent_log_lines(minutes: int, limit: int = 120) -> list[str]:
+    """Pull this service's own recent log entries."""
+    try:
+        from google.cloud import logging as gcl
+    except ImportError:
+        return []
+    try:
+        client = gcl.Client(project=settings.gcp_project)
+        flt = (f'resource.type="cloud_run_revision" '
+               f'resource.labels.service_name="vitahome-gateway" '
+               f'timestamp>="{_minutes_ago(minutes)}"')
+        out = []
+        for entry in client.list_entries(filter_=flt, order_by=gcl.DESCENDING,
+                                         max_results=limit):
+            p = entry.payload
+            out.append(p if isinstance(p, str) else str(p))
+        return out
+    except Exception as e:  # noqa: BLE001 — an audit tool must not take the service down
+        log.warning("could not read logs: %s", e)
+        return []
+
+
+def _minutes_ago(m: int) -> str:
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(minutes=m)) \
+        .isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+@app.get("/compliance/redactions")
+def compliance_redactions():
+    """What the deterministic filter has scrubbed since this instance started."""
+    return {"redactions": redact.redaction_counts(),
+            "note": "defence in depth — PHI is not supposed to reach a log line at all"}
+
 
 @app.get("/usage")
 def usage():
@@ -190,13 +258,17 @@ def get_exceptions(pid: str):
     """
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
+    # Filter in Firestore, not in Python. This endpoint is polled continuously
+    # by the console; reading every task document and discarding the 98% that
+    # are already done meant ~200 billed reads per poll, per open tab, forever.
+    # The single-field index on `status` exists automatically.
     snaps = (ledger.db().collection("patients").document(pid)
-             .collection("tasks").limit(200).stream())
+             .collection("tasks")
+             .where(filter=firestore.FieldFilter("status", "in", ["refused", "escalated"]))
+             .limit(50).stream())
     out = []
     for s in snaps:
         t = s.to_dict() or {}
-        if t.get("status") not in ("refused", "escalated"):
-            continue
         esc, ref = t.get("escalation") or {}, t.get("refusal") or {}
         # Everything the Escalator decided lives under escalation.context —
         # ledger.escalate stores the agent's payload there verbatim rather than
@@ -226,6 +298,27 @@ def get_exceptions(pid: str):
                             else -r["waitedSeconds"] / 3600))
     return {"exceptions": out, "count": len(out),
             "breached": sum(1 for r in out if r["breached"])}
+
+
+@app.get("/patient/{pid}/checkin/audio")
+def checkin_audio(pid: str):
+    """Read today's check-in question aloud.
+
+    Synthesised on demand, not at check-in time: a question nobody plays costs
+    nothing, and the text is the durable artefact either way. If speech is
+    unavailable this returns 503 with the reason — the caller shows the text,
+    which is what it was showing anyway.
+    """
+    doc = ledger.db().collection("patients").document(pid).get().to_dict() or {}
+    q = (doc.get("openCheckIn") or {}).get("question")
+    if not q:
+        raise HTTPException(404, "no open check-in for this patient")
+    try:
+        pcm, mime = gemini.speak(q)
+    except gemini.VoiceUnavailable as e:
+        raise HTTPException(503, f"voice unavailable — showing text instead: {e}") from e
+    return Response(content=gemini.pcm_to_wav(pcm, mime), media_type="audio/wav",
+                    headers={"Cache-Control": "no-store"})
 
 
 class CheckInAnswer(BaseModel):

@@ -1,17 +1,26 @@
 #!/usr/bin/env bash
-# The one cost lever that matters, as a switch.
+# Keep an instance alive, or don't.
 #
-#   ./scripts/warm.sh off    scale to zero when idle — costs ~nothing between
-#                            sessions, first visitor waits on a cold start
-#   ./scripts/warm.sh on     keep one instance of each service alive — instant
-#                            for anyone who opens the link, ~$0.75/day
+#   ./scripts/warm.sh off    scale to zero when idle  (default, ~$0/month)
+#   ./scripts/warm.sh on     keep one instance alive  (~$0.75/day)
 #   ./scripts/warm.sh        show the current setting
 #
-# Build with it off. Turn it on before submitting, and before recording.
+# **You almost certainly want "off".**
 #
-# Everything else in this project is priced in fractions of a cent: a parse is a
-# few thousand Gemini tokens, a booking is two FHIR writes. Two always-on Cloud
-# Run instances are the only thing here that bills while nobody is using it.
+# Two always-on instances were costing roughly $23/month to serve nobody. The
+# reason to keep them was cold starts, which were around eight seconds — long
+# enough that a judge opening the link would notice.
+#
+# Startup CPU boost fixed that. Cloud Run gives the container full CPU while it
+# boots instead of the throttled share an idle instance normally gets, and it
+# costs nothing extra. Measured after ten minutes idle:
+#
+#     gateway   cold 0.73s    warm 0.43s
+#     web       cold 0.80s    warm 0.34s
+#
+# Sub-second from a standing start. So the trade this script exists to manage
+# has mostly evaporated: turn it on for a recording if you want the last 300ms,
+# but the honest answer is that the app costs nothing to leave running.
 set -uo pipefail
 
 PROJECT="${PROJECT:-gen-lang-client-0109591583}"

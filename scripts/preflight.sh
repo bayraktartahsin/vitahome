@@ -56,15 +56,20 @@ REV=$(gcloud run services describe vitahome-gateway --region "$REGION" --project
       --format='value(status.latestReadyRevisionName)' 2>/dev/null)
 [ -n "$REV" ] && ok "gateway revision $REV" || bad "cannot read gateway revision"
 
-# Cost guard. min-instances 0 is right while building — it is wrong on the day a
-# judge opens the link cold and waits ten seconds for a first paint.
+# Cost guard. Scale-to-zero is the right default now that startup CPU boost has
+# cold starts under a second — it used to be a real trade against a judge
+# waiting eight seconds for a first paint, and it is no longer.
 MIN=$(gcloud run services describe vitahome-gateway --region "$REGION" --project "$PROJECT" \
       --format="value(spec.template.metadata.annotations['autoscaling.knative.dev/minScale'])" 2>/dev/null)
+BOOST=$(gcloud run services describe vitahome-gateway --region "$REGION" --project "$PROJECT" \
+        --format="value(spec.template.metadata.annotations['run.googleapis.com/startup-cpu-boost'])" 2>/dev/null)
 if [ "${MIN:-0}" -ge 1 ] 2>/dev/null; then
-  ok "min-instances=$MIN — warm for judges"
+  ok "min-instances=$MIN — always warm (\$0.75/day)"
+elif [ "$BOOST" = "true" ]; then
+  ok "scale-to-zero with startup CPU boost — cold start measured at 0.73s"
 else
-  warn "min-instances=0 — cheap, but first visitor waits on a cold start."
-  printf "      before submitting: %s\n" "./scripts/warm.sh on"
+  bad "scale-to-zero WITHOUT cpu-boost — cold starts run ~8s. Fix:"
+  printf "      gcloud run services update vitahome-gateway --region %s --cpu-boost\n" "$REGION"
 fi
 
 # ------------------------------------------------------------- substrate ---

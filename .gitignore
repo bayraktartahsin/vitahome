@@ -13,6 +13,14 @@ node_modules/
 out/
 *.log
 
+# Credentials — never commit. `git add -A` is routine here, so these patterns
+# are the thing standing between a keys file and a public repository.
+keys
+keys.*
+*keys.rtf
+*.key
+*credentials*.json
+
 # Secrets — never commit
 .env
 .env.*

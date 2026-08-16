@@ -70,18 +70,29 @@ def generate_json(
     parts: list[Any] = []
     if image is not None:
         parts.append(types.Part.from_bytes(data=image, mime_type=mime_type))
+
+    # Gemma is served through the same API but does not support response_schema.
+    # Asking for it yields JSON followed by whatever else the model felt like
+    # saying, which then fails to parse. So it gets the shape in the prompt and
+    # a tolerant reader on the way back.
+    structured = "gemma" not in mdl.lower()
+    if not structured:
+        prompt = (f"{prompt}\n\nReply with ONE JSON object and nothing else — no "
+                  f"markdown fence, no commentary. It must match this schema:\n"
+                  f"{json.dumps(schema)}")
     parts.append(types.Part.from_text(text=prompt))
+
+    cfg: dict[str, Any] = {"temperature": temperature}
+    if structured:
+        cfg["response_mime_type"] = "application/json"
+        cfg["response_schema"] = schema
 
     t0 = time.perf_counter()
     try:
         resp = client().models.generate_content(
             model=mdl,
             contents=[types.Content(role="user", parts=parts)],
-            config=types.GenerateContentConfig(
-                temperature=temperature,
-                response_mime_type="application/json",
-                response_schema=schema,
-            ),
+            config=types.GenerateContentConfig(**cfg),
         )
     except Exception as e:  # noqa: BLE001 — reraised as our own type
         raise ModelError(f"{mdl} call failed: {e}") from e
@@ -92,8 +103,10 @@ def generate_json(
         raise ModelError(f"{mdl} returned an empty response")
     try:
         parsed = json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ModelError(f"{mdl} returned non-JSON despite a response schema: {e}") from e
+    except json.JSONDecodeError:
+        parsed = _first_json_object(text)
+        if parsed is None:
+            raise ModelError(f"{mdl} returned no parseable JSON object") from None
 
     usage = getattr(resp, "usage_metadata", None)
     meta = {
@@ -145,6 +158,106 @@ def usage_report() -> dict[str, Any]:
         },
         "note": "tokens since this instance started — not dollars, and not billing",
     }
+
+
+def _first_json_object(text: str) -> dict[str, Any] | None:
+    """Pull the first complete JSON object out of a noisy reply.
+
+    Brace-matching rather than a regex, and it tracks whether it is inside a
+    string so that a ``}`` in a value cannot end the object early. Needed for
+    models without schema support, where the answer routinely arrives wrapped in
+    a markdown fence or trailed by an explanation nobody asked for.
+    """
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth, in_str, escaped = 0, False, False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                try:
+                    return json.loads(text[start:i + 1])
+                except json.JSONDecodeError:
+                    return None
+    return None
+
+
+class VoiceUnavailable(RuntimeError):
+    """Speech synthesis is not available on this key or model.
+
+    Its own type because the caller's correct response is to fall back to text,
+    not to fail the request. The Coach's question is durable either way — audio
+    is a rendering of it, never the thing itself.
+    """
+
+
+def speak(text: str, *, voice: str = "Kore", model: str | None = None) -> tuple[bytes, str]:
+    """Synthesise speech. Returns ``(pcm_bytes, mime_type)``.
+
+    Called on demand rather than at check-in time: the question is written once
+    and read aloud only if somebody presses play, so an unheard check-in costs
+    nothing.
+    """
+    mdl = model or settings.model_tts
+    try:
+        resp = client().models.generate_content(
+            model=mdl,
+            contents=text,
+            config=types.GenerateContentConfig(
+                response_modalities=["AUDIO"],
+                speech_config=types.SpeechConfig(
+                    voice_config=types.VoiceConfig(
+                        prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name=voice)
+                    )
+                ),
+            ),
+        )
+    except Exception as e:  # noqa: BLE001
+        raise VoiceUnavailable(f"{mdl}: {e}") from e
+
+    for cand in resp.candidates or []:
+        for part in (cand.content.parts if cand.content else []) or []:
+            inline = getattr(part, "inline_data", None)
+            if inline and inline.data:
+                _meter(mdl, None, None)
+                return inline.data, inline.mime_type or "audio/L16;rate=24000"
+    raise VoiceUnavailable(f"{mdl} returned no audio")
+
+
+def pcm_to_wav(pcm: bytes, mime: str) -> bytes:
+    """Wrap raw PCM in a WAV header.
+
+    The API returns headerless signed 16-bit little-endian PCM; browsers will
+    not play that. Sample rate is parsed from the mime type rather than assumed,
+    because getting it wrong produces audio at the wrong pitch — which sounds
+    like a broken product rather than a wrong constant.
+    """
+    import io
+    import re
+    import wave
+
+    rate = int(m.group(1)) if (m := re.search(r"rate=(\d+)", mime or "")) else 24000
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)          # L16
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
 
 
 def ping() -> dict[str, Any]:

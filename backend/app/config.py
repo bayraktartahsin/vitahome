@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     model_fast: str = "gemini-3.5-flash-lite"   # 1.03s measured — high-volume extraction
     model_reason: str = "gemini-3.7-flash"      # 2.35s measured — reasoning + refusal judgment
     model_tts: str = "gemini-3.1-flash-tts-preview"
+    # Gemma for the log audit: it is pattern recognition, not judgement, and
+    # the compliance story reads better when the model reading your logs is
+    # the smallest one that can do the job rather than the most capable.
+    model_redact: str = "gemma-4-31b-it"
 
     # --- GCP ---
     gcp_project: str = "gen-lang-client-0109591583"
