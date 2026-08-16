@@ -36,6 +36,12 @@ export default function Home() {
           >
             Clinician console →
           </Link>
+          <Link
+            href="/architecture"
+            className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-semibold text-fam-ink2 transition hover:bg-fam-surface2 hover:text-fam-ink"
+          >
+            Architecture
+          </Link>
         </div>
 
         <div className="mt-16 grid gap-4 sm:grid-cols-2">

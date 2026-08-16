@@ -20,6 +20,14 @@
 
 html, body { padding: 0; margin: 0; }
 
+/* The themed background lives on <main>, so anything rendered outside it —
+   overscroll, a tall page, the area below short content — falls through to the
+   browser's default white. On the dark console that reads as a flash of white
+   while scrolling, which is exactly the kind of thing a viewer notices and a
+   recording cannot be retaken for. */
+body { background: #FAF7F2; }
+body:has(.theme-console) { background: #10141A; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
