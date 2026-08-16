@@ -163,6 +163,38 @@ invite. The Autonomy Ledger climbs.)*
 > knows precisely where its authority ends. The fleet executes the mechanical.
 > Only a clinician decides the clinical.
 
+**SET UP** *(the refusal spreading — do not rush this, it is the best thirty
+seconds in the demo and none of it is scripted)*
+
+> A refusal is only worth something if the rest of the fleet respects it. Watch
+> what the other agents do with an open question.
+
+**WATCH** *(the dose schedule and today's check-in.)*
+
+**PAY OFF**
+
+> The Pharmacist built the daily schedule — four drugs, real times. And
+> amlodipine is held. Not dropped, held: it says a clinician has been asked to
+> decide whether this drug applies.
+>
+> It reads active medications from the record, and amlodipine is still active,
+> because nobody has decided. It would have been trivial for it to put that pill
+> on the fridge at eight in the morning — which would be a clinical decision,
+> made silently, by the agent least qualified to make it.
+>
+> And then the Coach. It gets one question a day. Here is what it chose:
+
+*(read the question off the screen)*
+
+> "What was your most recent blood pressure reading?"
+>
+> Its stated reason: that reading is the objective data the clinician needs to
+> decide whether to resume or discontinue amlodipine.
+>
+> Nobody wired that. Three agents independently converged on the one open
+> decision in this patient's care — one refused it, one honoured the refusal,
+> and one went looking for the fact that would resolve it.
+
 ---
 
 ## 2:00 — The Failure Drill *(hand over the knife)*

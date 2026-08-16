@@ -152,3 +152,53 @@ def test_missing_patient_record_refuses(run):
     with pytest.raises(Refusal) as e:
         pharmacist.body("p", "t", {})
     assert "FHIR patient record" in e.value.reason
+
+
+# ------------------------------------------------- refusals must propagate
+
+CONFLICTED = {**PLAN, "openConflicts": [
+    {"drug": "Amlodipine 5 mg", "question": "stop or resume?"}]}
+
+
+def test_a_drug_another_agent_refused_is_not_scheduled(run):
+    """The live failure. The Reconciler declined to decide whether amlodipine
+    was stopped, so it stayed active in FHIR — and the Pharmacist put it on the
+    family's fridge at 08:00. One agent refusing is worth nothing if the next
+    one quietly proceeds."""
+    doc, written = run([_dose("Amlodipine 5 mg", ("08:00",)),
+                        _dose("Aspirin 81 mg", ("08:00",))],
+                       plan=CONFLICTED)
+    with pytest.raises(Refusal) as e:
+        pharmacist.body("p", "t", {})
+    assert "Amlodipine" in e.value.reason
+    assert "clinician has been asked to decide" in e.value.reason
+    assert written == ["Aspirin 81 mg"], "a disputed drug was dispensed"
+
+
+def test_the_disputed_drug_is_held_not_dropped(run):
+    """It must appear as unresolved, not vanish. A drug that silently disappears
+    from the schedule is how someone stops taking something by accident."""
+    doc, _ = run([_dose("Amlodipine 5 mg", ("08:00",))], plan=CONFLICTED)
+    with pytest.raises(Refusal):
+        pharmacist.body("p", "t", {})
+    sched = doc.merged["doseSchedule"]
+    assert [u["drug"] for u in sched["unresolved"]] == ["Amlodipine 5 mg"]
+    assert sched["doses"] == []
+
+
+def test_conflict_matching_survives_dose_suffixes(run):
+    """FHIR says "Amlodipine 5 mg", the conflict says "Amlodipine". Neither is
+    wrong, and an exact-match check would let the drug through."""
+    doc, written = run([_dose("Amlodipine 5 mg besylate", ("08:00",))],
+                       plan={**PLAN, "openConflicts": [{"drug": "Amlodipine"}]})
+    with pytest.raises(Refusal):
+        pharmacist.body("p", "t", {})
+    assert written == []
+
+
+def test_unrelated_drugs_are_unaffected_by_an_open_conflict(run):
+    _, written = run([_dose("Ticagrelor 90 mg"), _dose("Aspirin 81 mg", ("08:00",))],
+                     plan=CONFLICTED)
+    summary = pharmacist.body("p", "t", {})
+    assert "scheduled 2 medications" in summary
+    assert written == ["Ticagrelor 90 mg", "Aspirin 81 mg"]

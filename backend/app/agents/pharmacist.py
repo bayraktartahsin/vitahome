@@ -15,6 +15,12 @@ dosage line cannot be turned into a schedule with confidence — a range, a
 missing frequency, a PRN instruction with no ceiling — it refuses and hands the
 question to a pharmacist rather than inventing a plausible time.
 
+**It also inherits other agents' refusals.** A drug the Reconciler declined to
+resolve is still active in the FHIR record, so it turns up here looking
+perfectly schedulable. Putting it on the family's fridge at 08:00 would be a
+clinical decision made silently by the agent least qualified to make it. One
+agent refusing is worth nothing if the next one quietly proceeds.
+
 Steps, each independently idempotent:
 
   1. fetch_prescriptions  active MedicationRequests from the FHIR store
@@ -146,6 +152,21 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
 
     plan = ledger.run_step(pid, task_id, "pharmacist", "build_schedule", _schedule)
     doses = plan.get("doses") or []
+
+    # A refusal has to travel. The Reconciler declined to decide whether
+    # amlodipine was stopped, so it is still active in FHIR — and this agent
+    # reads active medications. Without this check it puts the disputed drug on
+    # the family's fridge at 08:00, which is a decision, made silently, by the
+    # agent least qualified to make it.
+    #
+    # One agent refusing is worth nothing if the next one quietly proceeds.
+    disputed = {c.get("drug", "").strip().lower()
+                for c in (doc.get("openConflicts") or []) if c.get("drug")}
+    for d in doses:
+        name = (d.get("drug") or "").strip().lower()
+        if any(c and (c in name or name in c) for c in disputed):
+            d["confident"] = False
+            d["unclear"] = "a clinician has been asked to decide whether this drug applies"
 
     # A malformed clock time is a defect, not a nuance — it would render as a
     # broken schedule in the family view. Treat it exactly like the model
