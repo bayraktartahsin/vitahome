@@ -40,11 +40,29 @@ def _slot(days_out: int) -> datetime:
     return d.replace(hour=10, minute=0, second=0, microsecond=0)
 
 
+def _patient_fhir_id(pid: str, inp: dict[str, Any]) -> str | None:
+    """Resolve the FHIR Patient id ourselves.
+
+    Pub/Sub messages carry references, never PHI — so the agent looks the
+    patient up inside its own IAM scope rather than trusting the payload.
+    """
+    if inp.get("fhirPatientId"):
+        return inp["fhirPatientId"]
+    snap = ledger.db().collection("patients").document(pid).get()
+    return ((snap.to_dict() or {}).get("profile") or {}).get("fhirPatientId")
+
+
 def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
     inp = task.get("input") or {}
     specialty = (inp.get("specialty") or "").strip().lower()
     days_out = int(inp.get("daysOut") or 7)
     instruction_id = task.get("instructionId")
+    fhir_patient = _patient_fhir_id(pid, inp)
+    if not fhir_patient:
+        raise Refusal(
+            "no FHIR patient record is linked to this fleet",
+            options=["Link the patient record", "Seed the demo patient"],
+        )
 
     if specialty not in _DIRECTORY:
         # We do not guess which clinician the patient should see.
@@ -75,8 +93,7 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
             "comment": f"Auto-booked from discharge instruction {instruction_id or '—'}",
             "participant": [
                 {"actor": {"display": provider["practitioner"]}, "status": "accepted"},
-                {"actor": {"reference": f"Patient/{inp.get('fhirPatientId', 'unknown')}"},
-                 "status": "accepted"},
+                {"actor": {"reference": f"Patient/{fhir_patient}"}, "status": "accepted"},
             ],
         }, idem=key)
         return {"fhirId": res.get("id"), "start": start.isoformat(),

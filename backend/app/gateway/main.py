@@ -99,10 +99,14 @@ def get_ledger(pid: str):
 
 
 @app.get("/patient/{pid}/tasks")
-def get_tasks(pid: str):
-    tasks = (ledger.db().collection("patients").document(pid)
-             .collection("tasks").order_by("createdAt").limit(100).stream())
-    return {"tasks": [t.to_dict() for t in tasks]}
+def get_tasks(pid: str, limit: int = 60):
+    """Sorted in Python, not Firestore — no composite index to provision, and
+    the collection is bounded per patient."""
+    snaps = (ledger.db().collection("patients").document(pid)
+             .collection("tasks").limit(limit).stream())
+    tasks = [t.to_dict() for t in snaps]
+    tasks.sort(key=lambda t: t.get("createdAt") or 0)
+    return {"tasks": tasks, "count": len(tasks)}
 
 
 @app.get("/patient/{pid}/audit")

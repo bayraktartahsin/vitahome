@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     # --- Fleet runtime ---
     lease_seconds: int = 60          # task lease; supervisor flags stale beyond this
     heartbeat_seconds: int = 5       # agent heartbeat cadence
+    max_attempts: int = 5            # poison-message guard: stop redelivering after this
     drill_slow_seconds: int = 0            # >0 opens a kill window (demo only)
     drill_slow_step: str = "fhir_appointment"  # ...on exactly this step, so the window is predictable
     parser_confidence_floor: float = 0.85   # below this → human exception queue, never guessed

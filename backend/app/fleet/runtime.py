@@ -85,6 +85,19 @@ def run_task(agent: str, pid: str, task_id: str, body: AgentBody) -> dict[str, A
     log.info("agent=%s pid=%s task=%s attempt=%s worker=%s",
              agent, pid, task_id, attempt, WORKER_ID)
 
+    # Poison-message guard. Redelivery is our recovery mechanism, but a task
+    # that fails deterministically would retry forever and starve the fleet.
+    # After max_attempts we dead-letter it to the human queue and ACK, so the
+    # loop stops. Retries recover from crashes; they must not mask real bugs.
+    if attempt > settings.max_attempts:
+        ledger.escalate(
+            pid, task_id, agent,
+            f"failed {attempt - 1} times — dead-lettered for human review",
+            {"deadLetter": True, "lastError": task.get("error")},
+        )
+        log.error("agent=%s task=%s dead-lettered after %s attempts", agent, task_id, attempt - 1)
+        return {"status": "dead_letter", "attempt": attempt}
+
     try:
         with _Heartbeat(pid, task_id):
             summary = body(pid, task_id, task)

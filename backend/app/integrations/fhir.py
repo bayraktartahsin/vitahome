@@ -52,6 +52,31 @@ def find_by_idem(resource_type: str, key: str) -> dict[str, Any] | None:
     return hits[0] if hits else None
 
 
+class FhirError(RuntimeError):
+    """Carries the OperationOutcome diagnostics — FHIR 400s are precise, and
+    swallowing them turns a five-minute fix into an hour of guessing."""
+
+    def __init__(self, status: int, diagnostics: str, resource_type: str):
+        super().__init__(f"FHIR {resource_type} {status}: {diagnostics}")
+        self.status = status
+        self.diagnostics = diagnostics
+
+
+def _raise_for_outcome(r: httpx.Response, resource_type: str) -> None:
+    if r.is_success:
+        return
+    diagnostics = r.text[:400]
+    try:
+        for issue in r.json().get("issue", []):
+            d = issue.get("diagnostics") or (issue.get("details") or {}).get("text")
+            if d:
+                diagnostics = d
+                break
+    except Exception:  # noqa: BLE001
+        pass
+    raise FhirError(r.status_code, diagnostics, resource_type)
+
+
 def create(resource_type: str, body: dict[str, Any], idem: str | None = None) -> dict[str, Any]:
     """Create a resource, idempotently when ``idem`` is supplied."""
     if idem:
@@ -63,7 +88,7 @@ def create(resource_type: str, body: dict[str, Any], idem: str | None = None) ->
     r = httpx.post(f"{settings.fhir_base}/{resource_type}",
                    headers=_headers(), json={**body, "resourceType": resource_type},
                    timeout=30.0)
-    r.raise_for_status()
+    _raise_for_outcome(r, resource_type)
     return r.json()
 
 
