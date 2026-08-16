@@ -163,7 +163,14 @@ def run_step(pid: str, task_id: str, agent: str, step_name: str,
               task_id, {"idempotencyKey": key})
         return done[step_name].get("result", {})
 
-    # 2. Demo-only window that makes the kill reliably land mid-task.
+    # 2. If this agent has been armed on the chaos panel, die here — inside the
+    #    step, before the side effect, with the message still unacked.
+    #    Imported lazily: chaos imports from this module.
+    from . import chaos
+    if chaos.consume_if_armed(agent, pid, task_id, step_name):
+        return {}          # unreachable — the process is gone
+
+    # 3. Demo-only window that widens the kill target for a hand-timed kill.
     #    Scoped to ONE named step so the window is predictable on camera and
     #    normal task duration stays well inside the Pub/Sub ack deadline.
     if settings.drill_slow_seconds > 0 and step_name == settings.drill_slow_step:

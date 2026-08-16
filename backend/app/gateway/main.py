@@ -205,12 +205,34 @@ def demo_book_followups(patientId: str = "p_hero"):
 
 # ------------------------------------------------------------ the drill ----
 
-@app.post("/chaos/kill")
-def chaos_kill(agent: str = "scheduler", patientId: str | None = None):
-    """The judge picks the agent and the moment. This really kills the process."""
+@app.post("/chaos/arm")
+def chaos_arm(agent: str = "scheduler", patientId: str | None = None):
+    """Arm an agent to die inside its next step.
+
+    Deterministic and still a genuine ungraceful exit — the worker kills itself
+    mid-step, before the side effect, with the Pub/Sub message unacked.
+    """
     if agent not in AGENT_NAMES:
         raise HTTPException(404, "unknown agent")
-    return chaos.kill_process(agent, patientId)
+    return chaos.arm(agent, patientId)
+
+
+@app.post("/chaos/disarm")
+def chaos_disarm():
+    return chaos.disarm()
+
+
+@app.get("/chaos/status")
+def chaos_status():
+    return {"armed": chaos.armed_agent()}
+
+
+@app.post("/chaos/kill")
+def chaos_kill(agent: str = "scheduler", patientId: str | None = None):
+    """Kill immediately, whichever instance serves this request."""
+    if agent not in AGENT_NAMES:
+        raise HTTPException(404, "unknown agent")
+    return chaos.kill_now(agent, patientId)
 
 
 @app.post("/supervisor/scan")

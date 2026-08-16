@@ -65,14 +65,23 @@ export default function Drill() {
     setBusy(null);
   }
 
-  async function kill(agent: string) {
+  async function arm(agent: string) {
     setBusy(agent);
-    say(`💀 killing ${agent} — real process exit, no cleanup`);
+    say(`☠︎ ${agent} armed — it will die inside its next step`);
+    await fetch(`${API}/chaos/arm?agent=${agent}&patientId=${patient}`, {
+      method: "POST",
+    }).catch(() => say("could not arm — is the gateway up?"));
+    say("now press “Start a task” and watch it die mid-step");
+    setBusy(null);
+  }
+
+  async function killNow(agent: string) {
+    setBusy(agent);
+    say(`💀 killing ${agent} now — real process exit, no cleanup`);
     // The process dies mid-request, so this fetch is expected to fail. That's the point.
     await fetch(`${API}/chaos/kill?agent=${agent}&patientId=${patient}`, {
       method: "POST",
     }).catch(() => say("connection dropped — the worker is gone"));
-    say("waiting on Pub/Sub redelivery + ledger replay…");
     setBusy(null);
   }
 
@@ -114,22 +123,32 @@ export default function Drill() {
 
         <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {AGENTS.map((a) => (
-            <button
+            <div
               key={a.id}
-              onClick={() => kill(a.id)}
-              disabled={busy !== null}
-              className="group rounded-con border border-con-danger/30 bg-con-surface p-4 text-left transition hover:border-con-danger hover:bg-con-danger/10 disabled:opacity-40"
+              className="rounded-con border border-con-danger/30 bg-con-surface p-4 transition hover:border-con-danger/60"
             >
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold text-con-ink">
-                  {a.glyph} {a.label}
-                </span>
-                <span className="font-mono text-[10px] uppercase tracking-widest text-con-danger opacity-60 group-hover:opacity-100">
-                  kill
-                </span>
+              <div className="text-sm font-semibold text-con-ink">
+                {a.glyph} {a.label}
               </div>
               <div className="mt-1 text-[11px] text-con-ink2">{a.note}</div>
-            </button>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => arm(a.id)}
+                  disabled={busy !== null}
+                  className="flex-1 rounded bg-con-danger/15 px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-con-danger ring-1 ring-con-danger/40 transition hover:bg-con-danger/25 disabled:opacity-40"
+                >
+                  arm
+                </button>
+                <button
+                  onClick={() => killNow(a.id)}
+                  disabled={busy !== null}
+                  className="rounded px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-con-ink2 transition hover:text-con-danger disabled:opacity-40"
+                  title="Kill immediately — may hit an idle instance"
+                >
+                  kill now
+                </button>
+              </div>
+            </div>
           ))}
         </div>
 
