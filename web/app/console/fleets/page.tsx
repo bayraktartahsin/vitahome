@@ -4,17 +4,13 @@ import { useCallback, useState } from "react";
 import Link from "next/link";
 import { API } from "@/lib/api";
 import { usePoll } from "@/lib/usePoll";
+import { Btn, StatusLine, TopBar, post, useRunner } from "@/lib/ui";
 
 /**
- * The scale view — 3:20 in the demo.
- *
- * Every square is a real fleet: a real FHIR Patient, a real Firestore fleet
- * document, a real care plan. The colour comes from that fleet's own counters,
- * not from a seed value, so clicking one and finding nothing behind it is not
- * a thing that can happen.
- *
- * Sorted by what needs a human, never by arrival. Two hundred patients sorted
- * by arrival is a list; sorted by who is waiting, it is a queue.
+ * The scale view. Every square is a real fleet — a real FHIR Patient, a real
+ * Firestore document, a real care plan — and the color is computed from that
+ * fleet's own counters. Clicking one and finding nothing behind it cannot
+ * happen, which is the entire point of the screen.
  */
 
 type Fleet = {
@@ -27,89 +23,68 @@ type Fleet = {
   state: "needs_human" | "active" | "idle";
 };
 
-type Payload = {
-  fleets: Fleet[];
-  count: number;
-  needingHuman: number;
-  active: number;
-};
+type Payload = { fleets: Fleet[]; count: number; needingHuman: number; active: number };
 
 export default function Fleets() {
   const [data, setData] = useState<Payload | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [note, setNote] = useState<string | null>(null);
+  const { busy, note, run } = useRunner();
 
   const poll = useCallback(async () => {
     try {
       const r = await fetch(`${API}/console/fleets?limit=250`, { cache: "no-store" });
       if (r.ok) setData(await r.json());
     } catch {
-      /* the grid keeps its last good frame rather than flashing empty */
+      /* keep the last good frame */
     }
   }, []);
 
   usePoll(poll, 4000);
 
-  async function post(path: string, label: string, msg: string) {
-    setBusy(label);
-    setNote(msg);
-    try {
-      const r = await fetch(`${API}${path}`, { method: "POST" });
-      const body = await r.json().catch(() => ({}));
-      setNote(
-        r.ok
-          ? `${msg} — ${JSON.stringify(body).slice(0, 120)}`
-          : `failed: ${body?.detail ?? r.status}`,
-      );
-      await poll();
-    } finally {
-      setBusy(null);
-    }
-  }
-
   const fleets = data?.fleets ?? [];
 
   return (
-    <main className="theme-console min-h-screen">
-      <div className="border-b border-con-line px-6 py-3">
-        <div className="mx-auto flex max-w-7xl items-center justify-between text-xs">
-          <Link href="/console" className="text-con-ink2 hover:text-con-ink">
-            ← patient console
-          </Link>
-          <div className="font-mono text-con-ink2">fleet supervision · all patients</div>
-          <Link href="/console/drill" className="text-con-danger hover:underline">
-            chaos panel →
-          </Link>
-        </div>
-      </div>
+    <main className="theme-console min-h-screen font-sans">
+      <TopBar
+        dark
+        center="fleet supervision · all patients"
+        links={[
+          { href: "/console", label: "Console" },
+          { href: "/console/drill", label: "Chaos panel", tone: "danger" },
+        ]}
+      />
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        <div className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
-          <Big value={data?.count} label="fleets" tone="text-con-ink" />
-          <Big value={data?.needingHuman} label="need a human" tone="text-con-warn" />
-          <Big value={data?.active} label="working" tone="text-con-accent" />
+      <div className="mx-auto max-w-7xl px-5 py-8">
+        <div className="flex flex-wrap items-baseline gap-x-10 gap-y-2">
+          <Big v={data?.count} label="fleets" cls="text-con-ink" />
+          <Big v={data?.needingHuman} label="need a human" cls="text-con-warn" />
+          <Big v={data?.active} label="working" cls="text-con-accent" />
         </div>
         <p className="mt-2 max-w-3xl font-mono text-[10px] leading-relaxed text-con-ink2">
-          every square is a real fleet — a FHIR Patient in the Healthcare API, a
-          Firestore fleet document, a care plan. state is derived from that
-          fleet&rsquo;s own counters. synthetic patients, real infrastructure.
+          every square is a real fleet — a FHIR patient in the Healthcare API, a
+          Firestore document, a care plan. state derives from each fleet&rsquo;s own
+          counters. synthetic patients, real infrastructure.
         </p>
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Btn onClick={() => post("/demo/cohort?count=200", "seed", "seeding 200 fleets")} busy={busy}>
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <Btn dark kind="outline" busy={busy === "seed"}
+               onClick={() => run("seed", "seeding 200 fleets", () => post("/demo/cohort?count=200").then(poll))}>
             seed 200 fleets
           </Btn>
-          <Btn onClick={() => post("/demo/storm?count=50", "storm", "dispatching 50 real tasks")} busy={busy}>
+          <Btn dark kind="outline" busy={busy === "s50"}
+               onClick={() => run("s50", "dispatching 50 real tasks", () => post("/demo/storm?count=50").then(poll))}>
             hand work to 50
           </Btn>
-          <Btn onClick={() => post("/demo/storm?count=200", "storm2", "dispatching 200 real tasks")} busy={busy}>
+          <Btn dark kind="outline" busy={busy === "s200"}
+               onClick={() => run("s200", "dispatching 200 real tasks", () => post("/demo/storm?count=200").then(poll))}>
             hand work to all 200
           </Btn>
-          {note && <span className="self-center font-mono text-[10px] text-con-ink2">{note}</span>}
+        </div>
+        <div className="mt-2 min-h-[18px]">
+          <StatusLine dark note={note} />
         </div>
 
-        {/* ------------------------------------------------------- grid --- */}
-        <div className="mt-8 flex flex-wrap gap-1.5">
+        {/* --------------------------------------------------------- grid --- */}
+        <div className="mt-7 flex flex-wrap gap-1.5">
           {fleets.length === 0 && (
             <div className="w-full rounded-con border border-dashed border-con-line p-12 text-center font-mono text-xs text-con-ink2">
               no fleets yet — press &ldquo;seed 200 fleets&rdquo;
@@ -120,23 +95,31 @@ export default function Fleets() {
           ))}
         </div>
 
-        {/* -------------------------------------------- queue across all --- */}
+        <div className="mt-4 flex gap-5 font-mono text-[10px] uppercase tracking-wide text-con-ink2">
+          <LegendDot cls="bg-con-line" label="idle" />
+          <LegendDot cls="bg-con-accent/70" label="working" />
+          <LegendDot cls="bg-con-warn/80" label="needs a human" />
+        </div>
+
+        {/* ------------------------------------------------ queue across --- */}
         {data && data.needingHuman > 0 && (
           <section className="mt-10">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-con-ink2">
-              waiting on a person · across every fleet
+            <h2 className="border-b border-con-line pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-con-ink2">
+              waiting on a person &middot; across every fleet
             </h2>
-            <div className="mt-3 space-y-1.5">
+            <div className="mt-3 overflow-hidden rounded-con border border-con-line">
               {fleets
                 .filter((f) => f.state === "needs_human")
-                .map((f) => (
+                .map((f, i) => (
                   <Link
                     key={f.id}
                     href={`/console?patient=${f.id}`}
-                    className="flex items-center justify-between rounded-con border border-con-warn/40 bg-con-surface px-4 py-2.5 transition hover:border-con-warn"
+                    className={`flex items-center justify-between gap-4 bg-con-panel px-4 py-2.5 transition hover:bg-con-panel2 ${
+                      i > 0 ? "border-t border-con-line" : ""
+                    }`}
                   >
-                    <span className="text-sm text-con-ink">{f.name}</span>
-                    <span className="font-mono text-[11px] text-con-ink2">
+                    <span className="text-[13px] text-con-ink">{f.name}</span>
+                    <span className="hidden flex-1 truncate font-mono text-[11px] text-con-ink2 sm:block">
                       {f.condition ?? "—"}
                     </span>
                     <span className="font-mono text-[11px] text-con-warn">
@@ -152,32 +135,22 @@ export default function Fleets() {
   );
 }
 
-function Big({ value, label, tone }: { value?: number; label: string; tone: string }) {
+function Big({ v, label, cls }: { v?: number; label: string; cls: string }) {
   return (
-    <div>
-      <span className={`font-mono text-4xl tabular-nums ${tone}`}>{value ?? "—"}</span>
-      <span className="ml-2 text-xs text-con-ink2">{label}</span>
+    <div className="flex items-baseline gap-2">
+      <span className={`font-mono text-4xl font-medium ${cls}`}>{v ?? "·"}</span>
+      <span className="font-mono text-[11px] uppercase tracking-wide text-con-ink2">
+        {label}
+      </span>
     </div>
   );
 }
 
-function Btn({
-  children,
-  onClick,
-  busy,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  busy: string | null;
-}) {
+function LegendDot({ cls, label }: { cls: string; label: string }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={busy !== null}
-      className="rounded-con border border-con-line px-3 py-1.5 font-mono text-[11px] text-con-ink2 transition hover:border-con-accent/50 hover:text-con-ink disabled:opacity-40"
-    >
-      {children}
-    </button>
+    <span className="flex items-center gap-1.5">
+      <span className={`h-2.5 w-2.5 rounded-[2px] ${cls}`} /> {label}
+    </span>
   );
 }
 
@@ -193,7 +166,7 @@ function Square({ f }: { f: Fleet }) {
       title={`${f.name} · ${f.condition ?? "—"} · ${
         f.waiting ? `${f.waiting} waiting on a human` : `${f.autonomous} actions`
       }`}
-      className={`h-4 w-4 rounded-[3px] transition ${tone}`}
+      className={`h-4 w-4 rounded-[2px] transition ${tone}`}
     />
   );
 }

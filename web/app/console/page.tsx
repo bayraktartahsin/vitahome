@@ -1,22 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { API } from "@/lib/api";
 import { usePoll } from "@/lib/usePoll";
+import {
+  AUDIT_TAG,
+  AgentMark,
+  Btn,
+  StatusLine,
+  TopBar,
+  post,
+  useRunner,
+} from "@/lib/ui";
 
 /**
- * Clinician console — dense dark. An ops room.
+ * Clinician console — a ledger, not a wall of cards.
  *
- * Three panels, in the order a clinician actually needs them:
- *
- *   1. the Autonomy Ledger, because the first honest question about any agent
- *      fleet is "how much of this did it do without a person, and how often did
- *      it stop". Counts only — no invented dollar figures.
- *   2. the exception queue, sorted by SLA pressure rather than arrival. A queue
- *      ordered by arrival lets the urgent thing sit behind the routine one.
- *   3. the audit stream, append-only, including the gaps left by dead workers.
- *      The gap is never cleaned up — in a regulated domain the scar is evidence.
+ * Order matters: the Autonomy Ledger first (how much ran alone, how often it
+ * stopped), then everything waiting on a person sorted by SLA pressure, then
+ * the append-only audit stream with the dead-worker gaps left in.
  */
 
 type Ledger = {
@@ -43,22 +45,15 @@ type Exception = {
   breached: boolean;
 };
 
-type Audit = {
-  kind: string;
-  actor: string;
-  detail: string;
-  at?: { seconds?: number } | string;
-  taskId?: string;
-};
+type Audit = { kind: string; actor: string; detail: string; taskId?: string };
 
 export default function Console() {
-  // Read from the URL rather than useSearchParams: that hook forces the whole
-  // page into a Suspense boundary in the app router, and this is one string.
   const [PID, setPID] = useState("p_hero");
   const [ledger, setLedger] = useState<Ledger | null>(null);
   const [exceptions, setExceptions] = useState<Exception[]>([]);
   const [audit, setAudit] = useState<Audit[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [connected, setConnected] = useState(false);
+  const { busy, note, run } = useRunner();
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search).get("patient");
@@ -79,96 +74,101 @@ export default function Console() {
       grab<{ exceptions?: Exception[] }>(`/patient/${PID}/exceptions`, {}),
       grab<{ audit?: Audit[] }>(`/patient/${PID}/audit?limit=60`, {}),
     ]);
-    if (l) setLedger(l);
+    if (l) {
+      setLedger(l);
+      setConnected(true);
+    }
     setExceptions(e.exceptions ?? []);
     setAudit(a.audit ?? []);
-  }, []);
+  }, [PID]);
 
   usePoll(poll, 4000);
 
-  async function post(path: string, body?: unknown, label = "working") {
-    setBusy(label);
-    try {
-      await fetch(`${API}${path}`, {
-        method: "POST",
-        headers: body ? { "Content-Type": "application/json" } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      await poll();
-    } finally {
-      setBusy(null);
-    }
-  }
+  const act = (key: string, label: string, path: string, body?: unknown) =>
+    run(key, label, () => post(path, body).then(poll));
 
   return (
-    <main className="theme-console min-h-screen">
-      <div className="border-b border-con-line px-6 py-3">
-        <div className="mx-auto flex max-w-7xl items-center justify-between text-xs">
-          <Link href="/" className="text-con-ink2 hover:text-con-ink">
-            ← VitaHome
-          </Link>
-          <div className="font-mono text-con-ink2">
-            {PID === "p_hero" ? "Robert Hayes · post-PCI day 3" : PID}
-          </div>
-          <div className="flex gap-4">
-            <Link href="/console/fleets" className="text-con-ink2 hover:text-con-ink">
-              all fleets
-            </Link>
-            <Link href="/console/drill" className="text-con-danger hover:underline">
-              chaos panel →
-            </Link>
-          </div>
-        </div>
-      </div>
+    <main className="theme-console min-h-screen font-sans">
+      <TopBar
+        dark
+        center={PID === "p_hero" ? "Robert Hayes · post-PCI · day 3" : PID}
+        links={[
+          { href: "/console/fleets", label: "All fleets" },
+          { href: "/console/drill", label: "Chaos panel", tone: "danger" },
+        ]}
+      />
 
-      <div className="mx-auto max-w-7xl px-6 py-8">
-        {/* ---------------------------------------------------- ledger --- */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-          <Stat label="done autonomously" value={ledger?.autonomous} tone="accent" />
-          <Stat label="refused (ambiguous)" value={ledger?.refused} tone="refuse" />
-          <Stat label="escalated — awaiting a human" value={ledger?.escalated} tone="warn" />
-          <Stat label="closed by a human" value={ledger?.humanDecisions} tone="info" />
-          <Stat label="external systems written" value={ledger?.systemsTouched} tone="ink" />
-        </div>
+      <div className="mx-auto max-w-7xl px-5 py-7">
+        {/* ------------------------------------------------------ ledger --- */}
+        <section className="grid grid-cols-2 divide-con-line overflow-hidden rounded-con border border-con-line sm:grid-cols-5 sm:divide-x">
+          <Stat label="done autonomously" v={ledger?.autonomous} cls="text-con-accent" />
+          <Stat label="refused — ambiguous" v={ledger?.refused} cls="text-con-hold" />
+          <Stat label="escalated — awaiting" v={ledger?.escalated} cls="text-con-warn" />
+          <Stat label="closed by a human" v={ledger?.humanDecisions} cls="text-con-info" />
+          <Stat label="systems written" v={ledger?.systemsTouched} cls="text-con-ink" />
+        </section>
         <p className="mt-2 font-mono text-[10px] leading-relaxed text-con-ink2">
           verifiable counts only — no estimated savings, no invented dollars.
-          &ldquo;escalated&rdquo; means handed over and waiting; it becomes
-          &ldquo;closed by a human&rdquo; only when a named person acts.
+          {!connected && (
+            <span className="ml-2 text-con-warn">
+              <span className="vh-spin mr-1" />
+              waking the fleet — it sleeps between sessions, first touch takes a second
+            </span>
+          )}
         </p>
 
-        {/* ------------------------------------------------------ runs --- */}
-        <div className="mt-6 flex flex-wrap gap-2">
-          <Btn onClick={() => post("/demo/seed", undefined, "seed")} busy={busy}>
+        {/* -------------------------------------------------------- runs --- */}
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          <Btn dark kind="outline" busy={busy === "seed"}
+               onClick={() => act("seed", "seeding the patient", "/demo/seed")}>
             seed patient
           </Btn>
-          <Btn onClick={() => post(`/demo/book-followups?patientId=${PID}`, undefined, "book")} busy={busy}>
-            book every follow-up
+          <Btn dark kind="outline" busy={busy === "book"}
+               onClick={() => act("book", "booking every follow-up", `/demo/book-followups?patientId=${PID}`)}>
+            book follow-ups
           </Btn>
-          <Btn
-            onClick={() => post("/demo/dispatch", { patientId: PID, agent: "reconciler" }, "recon")}
-            busy={busy}
-          >
+          <Btn dark kind="outline" busy={busy === "recon"}
+               onClick={() => act("recon", "reconciling medications", "/demo/dispatch",
+                 { patientId: PID, agent: "reconciler" })}>
             reconcile medications
           </Btn>
-          <Btn onClick={() => post(`/demo/observe?scenario=chest_pain&patientId=${PID}`, undefined, "cp")} busy={busy}>
+          <Btn dark kind="outline" busy={busy === "pharm"}
+               onClick={() => act("pharm", "building the dose schedule", "/demo/dispatch",
+                 { patientId: PID, agent: "pharmacist" })}>
+            dose schedule
+          </Btn>
+          <Btn dark kind="outline" busy={busy === "coach"}
+               onClick={() => act("coach", "choosing today's question", "/demo/dispatch",
+                 { patientId: PID, agent: "coach" })}>
+            daily check-in
+          </Btn>
+          <Btn dark kind="outline" busy={busy === "cp"}
+               onClick={() => act("cp", "reporting chest pain", `/demo/observe?scenario=chest_pain&patientId=${PID}`)}>
             report: chest pain
           </Btn>
-          <Btn
-            onClick={() => post(`/demo/observe?scenario=lightheaded_on_standing&patientId=${PID}`, undefined, "lh")}
-            busy={busy}
-          >
+          <Btn dark kind="outline" busy={busy === "lh"}
+               onClick={() => act("lh", "reporting lightheadedness", `/demo/observe?scenario=lightheaded_on_standing&patientId=${PID}`)}>
             report: lightheaded
           </Btn>
-          <Btn onClick={() => post(`/demo/reset?patientId=${PID}`, undefined, "reset")} busy={busy} danger>
+          <Btn dark kind="danger" busy={busy === "reset"}
+               onClick={() => act("reset", "resetting the demo patient", `/demo/reset?patientId=${PID}`)}>
             reset
           </Btn>
         </div>
+        <div className="mt-2 min-h-[18px]">
+          <StatusLine dark note={note} />
+          {!note && (
+            <p className="font-mono text-[10px] text-con-ink2">
+              async agents take 15–25s to land — watch the audit stream fill on the right
+            </p>
+          )}
+        </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-5">
-          {/* ------------------------------------------- exceptions --- */}
+        <div className="mt-7 grid gap-6 lg:grid-cols-5">
+          {/* --------------------------------------------- exceptions --- */}
           <section className="lg:col-span-3">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-con-ink2">
-              waiting on a person · {exceptions.length}
+            <h2 className="border-b border-con-line pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-con-ink2">
+              waiting on a person &middot; {exceptions.length}
             </h2>
             <div className="mt-3 space-y-3">
               {exceptions.length === 0 && (
@@ -180,28 +180,36 @@ export default function Console() {
                 <ExceptionCard
                   key={x.taskId}
                   x={x}
+                  busy={busy === x.taskId}
                   onResolve={() =>
-                    post(`/patient/${PID}/task/${x.taskId}/resolve`,
-                      { actor: "Dr. Chen", note: "reviewed" }, x.taskId)
+                    run(x.taskId, "closing as Dr. Chen", () =>
+                      post(`/patient/${PID}/task/${x.taskId}/resolve`, {
+                        actor: "Dr. Chen",
+                        note: "reviewed",
+                      }).then(poll))
                   }
                   onDecide={(option) =>
-                    post(`/patient/${PID}/task/${x.taskId}/decide`,
-                      { actor: "Dr. Chen", option }, x.taskId)
+                    run(x.taskId, "recording Dr. Chen's decision", () =>
+                      post(`/patient/${PID}/task/${x.taskId}/decide`, {
+                        actor: "Dr. Chen",
+                        option,
+                      }).then(poll))
                   }
-                  busy={busy === x.taskId}
                 />
               ))}
             </div>
           </section>
 
-          {/* ----------------------------------------------- audit --- */}
+          {/* ------------------------------------------------- audit --- */}
           <section className="lg:col-span-2">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-con-ink2">
-              audit stream · append-only
+            <h2 className="border-b border-con-line pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-con-ink2">
+              audit stream &middot; append-only
             </h2>
-            <div className="mt-3 max-h-[36rem] space-y-1 overflow-y-auto rounded-con border border-con-line bg-con-bg p-3">
+            <div className="mt-3 max-h-[38rem] space-y-[3px] overflow-y-auto pr-1">
               {audit.length === 0 && (
-                <div className="py-8 text-center font-mono text-xs text-con-ink2">—</div>
+                <div className="py-8 text-center font-mono text-xs text-con-ink2">
+                  &mdash;
+                </div>
               )}
               {audit.map((a, i) => (
                 <AuditRow key={i} a={a} />
@@ -214,173 +222,135 @@ export default function Console() {
   );
 }
 
-/* ------------------------------------------------------------------ bits -- */
+/* ---------------------------------------------------------------- pieces -- */
 
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value?: number;
-  tone: "accent" | "info" | "refuse" | "warn" | "ink";
-}) {
-  const color = {
-    accent: "text-con-accent",
-    info: "text-con-info",
-    refuse: "text-[#9B7BD1]",
-    warn: "text-con-warn",
-    ink: "text-con-ink",
-  }[tone];
+function Stat({ label, v, cls }: { label: string; v?: number; cls: string }) {
   return (
-    <div className="rounded-con border border-con-line bg-con-surface p-4">
-      <div className={`animate-odometer font-mono text-3xl tabular-nums ${color}`}>
-        {value ?? "—"}
+    <div className="bg-con-panel px-4 py-3.5">
+      <div className={`animate-odometer font-mono text-[26px] font-medium leading-none ${cls}`}>
+        {v ?? "·"}
       </div>
-      <div className="mt-1 text-[11px] leading-tight text-con-ink2">{label}</div>
+      <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-con-ink2">
+        {label}
+      </div>
     </div>
   );
 }
 
-function Btn({
-  children,
-  onClick,
-  busy,
-  danger,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  busy: string | null;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={busy !== null}
-      className={`rounded-con border px-3 py-1.5 font-mono text-[11px] transition disabled:opacity-40 ${
-        danger
-          ? "border-con-danger/30 text-con-danger hover:bg-con-danger/10"
-          : "border-con-line text-con-ink2 hover:border-con-accent/50 hover:text-con-ink"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 function mmss(s: number) {
-  const m = Math.floor(s / 60);
-  return `${m}m ${String(Math.floor(s % 60)).padStart(2, "0")}s`;
+  return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 }
 
 function ExceptionCard({
   x,
+  busy,
   onResolve,
   onDecide,
-  busy,
 }: {
   x: Exception;
+  busy: boolean;
   onResolve: () => void;
   onDecide: (option: string) => void;
-  busy: boolean;
 }) {
   const refusal = x.kind === "refused";
+  const edge = x.breached ? "#C9604F" : refusal ? "#8FA3CC" : "#D2A03C";
+  const slaPct = x.slaSeconds ? Math.min(100, (x.waitedSeconds / x.slaSeconds) * 100) : 0;
+
   return (
     <div
-      className={`rounded-con border bg-con-surface p-4 ${
-        x.breached
-          ? "border-con-danger ring-1 ring-con-danger/30"
-          : refusal
-            ? "border-[#9B7BD1]/40"
-            : "border-con-warn/40"
-      }`}
+      className="rounded-con border border-con-line bg-con-panel"
+      style={{ borderLeft: `3px solid ${edge}` }}
     >
-      <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-wider">
-        <span className={refusal ? "text-[#9B7BD1]" : "text-con-warn"}>
-          {refusal ? "⚖ refused" : "🚨 escalated"}
-        </span>
-        <span className="text-con-ink2">{x.agent}</span>
-        {x.urgency && <span className="text-con-ink2">· {x.urgency}</span>}
-        {x.hardOverride && (
-          <span className="rounded bg-con-danger/20 px-1.5 py-0.5 text-con-danger">
-            red-flag override
+      <div className="p-4">
+        <div className="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
+          <span className={refusal ? "text-con-hold" : "text-con-warn"}>
+            {refusal ? "refused" : "escalated"}
           </span>
-        )}
-        {x.deadLetter && (
-          <span className="rounded bg-con-danger/20 px-1.5 py-0.5 text-con-danger">
-            dead-lettered
+          <AgentMark agent={x.agent} size={16} />
+          <span className="text-con-ink2">{x.agent}</span>
+          {x.urgency && <span className="text-con-danger">{x.urgency}</span>}
+          {x.hardOverride && (
+            <span className="bg-con-danger/20 px-1.5 py-0.5 text-con-danger">
+              red-flag override
+            </span>
+          )}
+          {x.deadLetter && (
+            <span className="bg-con-danger/20 px-1.5 py-0.5 text-con-danger">
+              dead-lettered
+            </span>
+          )}
+          <span className={`ml-auto ${x.breached ? "text-con-danger" : "text-con-ink2"}`}>
+            {x.slaSeconds
+              ? `${mmss(x.waitedSeconds)} / ${mmss(x.slaSeconds)}${x.breached ? " — breached" : ""}`
+              : `waiting ${mmss(x.waitedSeconds)}`}
           </span>
+        </div>
+
+        {x.slaSeconds > 0 && (
+          <div className="mt-2 h-[3px] w-full overflow-hidden rounded bg-con-line">
+            <div
+              className="h-full transition-[width] duration-1000"
+              style={{
+                width: `${slaPct}%`,
+                background: x.breached ? "#C9604F" : "#D2A03C",
+              }}
+            />
+          </div>
         )}
-        <span className={`ml-auto ${x.breached ? "text-con-danger" : "text-con-ink2"}`}>
-          {x.slaSeconds
-            ? `${mmss(x.waitedSeconds)} / ${mmss(x.slaSeconds)}${x.breached ? " · BREACHED" : ""}`
-            : `waiting ${mmss(x.waitedSeconds)}`}
-        </span>
-      </div>
 
-      <p className="mt-2 text-sm leading-snug text-con-ink">{x.question}</p>
+        <p className="mt-2.5 text-[13.5px] leading-snug text-con-ink">{x.question}</p>
 
-      {x.rationale && (
-        <p className="mt-2 text-xs leading-relaxed text-con-ink2">{x.rationale}</p>
-      )}
-      {x.argumentsAgainst && (
-        <p className="mt-1.5 border-l-2 border-con-line pl-2 text-xs leading-relaxed text-con-ink2">
-          <span className="text-con-ink2/70">against: </span>
-          {x.argumentsAgainst}
-        </p>
-      )}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {refusal ? (
-          x.options.map((o) => (
-            <button
-              key={o}
-              onClick={() => onDecide(o)}
-              disabled={busy}
-              className="rounded border border-[#9B7BD1]/40 px-2.5 py-1.5 text-left text-[11px] text-con-ink transition hover:bg-[#9B7BD1]/15 disabled:opacity-40"
-            >
-              {o}
-            </button>
-          ))
-        ) : (
-          <button
-            onClick={onResolve}
-            disabled={busy}
-            className="rounded border border-con-accent/40 px-3 py-1.5 font-mono text-[11px] text-con-accent transition hover:bg-con-accent/15 disabled:opacity-40"
-          >
-            acknowledge · Dr. Chen
-          </button>
+        {x.rationale && (
+          <p className="mt-2 text-[12px] leading-relaxed text-con-ink2">{x.rationale}</p>
         )}
+        {x.argumentsAgainst && (
+          <p className="mt-1.5 border-l-2 border-con-line pl-2 text-[12px] leading-relaxed text-con-ink2">
+            <span className="opacity-60">against — </span>
+            {x.argumentsAgainst}
+          </p>
+        )}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {refusal ? (
+            x.options.map((o) => (
+              <button
+                key={o}
+                onClick={() => onDecide(o)}
+                disabled={busy}
+                className="rounded-con border border-con-hold/40 px-2.5 py-1.5 text-left text-[12px] leading-snug text-con-ink transition hover:bg-con-hold/15 disabled:opacity-45"
+              >
+                {busy && <span className="vh-spin mr-1.5" />}
+                {o}
+              </button>
+            ))
+          ) : (
+            <Btn dark kind="outline" busy={busy} onClick={onResolve}>
+              acknowledge · Dr. Chen
+            </Btn>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
 function AuditRow({ a }: { a: Audit }) {
-  // The gap left by a killed worker is rendered, not hidden. It is the proof.
+  // The gap left by a killed worker is rendered, never hidden. It is the proof.
   if (a.kind === "AGENT_DOWN") {
     return (
-      <div className="animate-gapGrow my-1 rounded border-l-2 border-con-danger bg-con-danger/10 px-2 py-1.5 font-mono text-[11px] text-con-danger">
-        💀 {a.detail}
+      <div className="animate-gapGrow my-1.5 border-l-2 border-con-danger bg-con-danger/10 px-2.5 py-2 font-mono text-[11px] leading-snug text-con-danger">
+        <span className="mr-2 font-semibold uppercase tracking-wider">down</span>
+        {a.detail}
       </div>
     );
   }
-  const tone =
-    a.kind === "skip"
-      ? "text-con-info"
-      : a.kind === "redelivery"
-        ? "text-con-warn"
-        : a.kind === "refusal"
-          ? "text-[#9B7BD1]"
-          : a.kind === "escalation"
-            ? "text-con-danger"
-            : "text-con-ink2";
-  const glyph =
-    { skip: "⏭", redelivery: "🔁", refusal: "⚖", escalation: "🚨", lease: "🔒" }[a.kind] ?? "·";
+  const t = AUDIT_TAG[a.kind] ?? { tag: a.kind.slice(0, 5), cls: "text-con-ink2" };
   return (
-    <div className={`font-mono text-[11px] leading-snug ${tone}`}>
-      <span className="opacity-60">{glyph}</span>{" "}
-      <span className="opacity-50">{a.actor}</span> {a.detail}
+    <div className="flex gap-2 font-mono text-[11px] leading-snug">
+      <span className={`w-12 shrink-0 text-right uppercase ${t.cls}`}>{t.tag}</span>
+      <span className="text-con-ink2">
+        <span className="opacity-55">{a.actor}</span> {a.detail}
+      </span>
     </div>
   );
 }

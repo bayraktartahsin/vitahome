@@ -1,82 +1,113 @@
 import Link from "next/link";
+import { AGENTS, AgentMark } from "@/lib/agents";
+import { TopBar } from "@/lib/ui";
 
-/** Family surface — warm light. A kitchen-table product for frightened people. */
+/**
+ * The family surface's front door. A document, set properly — not a dashboard.
+ * The fleet is presented as a roster with hairline rules, the way a masthead
+ * lists its editors; the three proof links are the paths a judge actually takes.
+ */
 export default function Home() {
   return (
-    <main className="theme-family min-h-screen">
-      <div className="mx-auto max-w-3xl px-6 py-16 md:py-24">
-        <div className="inline-flex items-center gap-2 rounded-full border border-fam-line bg-fam-surface px-3 py-1 text-[11px] font-medium uppercase tracking-[0.2em] text-fam-ink2">
-          <span className="h-1.5 w-1.5 rounded-full bg-fam-accent" />
-          VitaHome · by Graviti Labs
-        </div>
+    <main className="theme-family min-h-screen font-sans">
+      <TopBar
+        links={[
+          { href: "/today", label: "Today" },
+          { href: "/console", label: "Console" },
+          { href: "/architecture", label: "Architecture" },
+        ]}
+      />
 
-        <h1 className="mt-6 font-display text-4xl leading-[1.12] text-fam-ink md:text-5xl">
-          The hospital saves your life,
-          <br />
-          then hands you a piece of paper.
-        </h1>
-
-        <p className="mt-5 max-w-xl text-lg leading-relaxed text-fam-ink2">
-          <span className="text-fam-ink">We take it from there.</span> Photograph the
-          papers they gave you. VitaHome reconciles the medications, books every
-          follow-up, watches for the warning signs written on that page — and calls a
-          human the moment one appears.
+      <div className="mx-auto max-w-3xl px-6 pb-20 pt-16 md:pt-24">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-fam-ink2">
+          Graviti Labs — the Vita family
         </p>
 
-        <div className="mt-9 flex flex-wrap gap-3">
+        <h1 className="mt-4 font-display text-[2.6rem] font-semibold leading-[1.08] text-fam-ink md:text-[3.4rem]">
+          The hospital saves your life, then hands you a piece of paper.
+        </h1>
+
+        <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-fam-ink2">
+          <span className="font-medium text-fam-ink">We take it from there.</span>{" "}
+          Photograph the discharge papers. Seven agents reconcile the medications,
+          book every follow-up, turn the doses into a real clock, and watch for the
+          warning signs written on that page — and hand every clinical judgement to
+          a licensed human.
+        </p>
+
+        <div className="mt-9 flex flex-wrap items-center gap-3">
           <Link
             href="/capture"
-            className="rounded-fam bg-fam-accent px-5 py-3 text-sm font-semibold text-white shadow-fam transition hover:opacity-90"
+            className="rounded-fam bg-fam-accent px-5 py-3 text-sm font-semibold text-fam-bg shadow-sheet transition hover:brightness-110 active:translate-y-px"
           >
             Photograph a document
           </Link>
           <Link
-            href="/today"
-            className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-semibold text-fam-ink transition hover:bg-fam-surface2"
-          >
-            Today&rsquo;s plan
-          </Link>
-          <Link
             href="/console"
-            className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-semibold text-fam-ink transition hover:bg-fam-surface2"
+            className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-medium text-fam-ink transition hover:bg-fam-surface2"
           >
-            Clinician console →
-          </Link>
-          <Link
-            href="/architecture"
-            className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-semibold text-fam-ink2 transition hover:bg-fam-surface2 hover:text-fam-ink"
-          >
-            Architecture
+            Watch the fleet work
           </Link>
         </div>
 
-        <div className="mt-16 grid gap-4 sm:grid-cols-2">
+        {/* ------------------------------------------------------ roster --- */}
+        <section className="mt-16">
+          <div className="flex items-baseline justify-between border-b-2 border-fam-ink pb-2">
+            <h2 className="font-display text-lg font-semibold text-fam-ink">The fleet</h2>
+            <span className="font-mono text-[11px] text-fam-ink2">
+              seven agents · all live
+            </span>
+          </div>
+          <ul>
+            {Object.entries(AGENTS).map(([id, a]) => (
+              <li
+                key={id}
+                className="flex items-baseline gap-4 border-b border-fam-line py-3.5"
+              >
+                <AgentMark agent={id} />
+                <span className="w-24 shrink-0 font-medium text-fam-ink">{a.name}</span>
+                <span className="hidden w-24 shrink-0 font-mono text-[11px] text-fam-ink2 sm:block">
+                  {a.verb}
+                </span>
+                <span className="text-[13.5px] leading-snug text-fam-ink2">{a.duty}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-[13px] leading-relaxed text-fam-ink2">
+            Four of the seven can refuse. When the paperwork contradicts itself, the
+            fleet does not pick the likelier reading — it assembles both and puts a
+            clinician in front of the decision.
+          </p>
+        </section>
+
+        {/* ------------------------------------------------------- proof --- */}
+        <section className="mt-14 grid gap-3 sm:grid-cols-3">
           {[
-            ["📄", "Parser", "reads", "Finds every instruction — and ranks the one that kills if missed."],
-            ["💊", "Reconciler", "checks", "New meds against old. Interactions. What to stop."],
-            ["📅", "Scheduler", "books", "Every follow-up appointment, without being asked."],
-            ["🏥", "Pharmacist", "sends", "Prescriptions routed, doses scheduled."],
-            ["👁", "Watchman", "watches", "The red flags on your document, 24/7."],
-            ["🗣", "Coach", "checks in", "One question a day, chosen by what matters now."],
-            ["🚨", "Escalator", "calls a human", "The only path to a clinical decision."],
-          ].map(([glyph, name, verb, duty]) => (
-            <div
-              key={name}
-              className="rounded-fam border border-fam-line bg-fam-surface p-5 shadow-fam"
+            ["Kill an agent", "A real process dies mid-task. Watch it recover without double-booking.", "/console/drill"],
+            ["200 fleets", "Every square is a real patient record. Hand them all real work.", "/console/fleets"],
+            ["The architecture", "How work flows, and how a task survives its worker dying.", "/architecture"],
+          ].map(([t, d, href]) => (
+            <Link
+              key={href}
+              href={href}
+              className="group rounded-fam border border-fam-line bg-fam-surface p-4 shadow-sheet transition hover:border-fam-accent/50"
             >
-              <div className="flex items-baseline gap-2">
-                <span className="text-lg">{glyph}</span>
-                <span className="font-semibold text-fam-ink">{name}</span>
-                <span className="text-xs text-fam-ink2">{verb}</span>
+              <div className="flex items-center justify-between">
+                <span className="font-display text-[15px] font-semibold text-fam-ink">{t}</span>
+                <span className="font-mono text-xs text-fam-ink2 transition group-hover:translate-x-0.5 group-hover:text-fam-accent">
+                  &rarr;
+                </span>
               </div>
-              <p className="mt-2 text-sm leading-relaxed text-fam-ink2">{duty}</p>
-            </div>
+              <p className="mt-1.5 text-[12.5px] leading-relaxed text-fam-ink2">{d}</p>
+            </Link>
           ))}
-        </div>
+        </section>
 
-        <footer className="mt-16 border-t border-fam-line pt-6 text-xs text-fam-ink2">
+        <footer className="mt-16 border-t border-fam-line pt-6 text-[12px] leading-relaxed text-fam-ink2">
           VitaHome never diagnoses and never prescribes. It executes instructions a
-          licensed clinician already wrote — and hands every ambiguity to a human.
+          licensed clinician already wrote, and hands every ambiguity to a person.
+          All demo patients are synthetic. Built on Google Cloud by{" "}
+          <span className="text-fam-ink">Graviti Labs</span>, makers of Vita.
         </footer>
       </div>
     </main>

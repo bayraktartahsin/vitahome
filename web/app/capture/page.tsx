@@ -3,21 +3,17 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { API } from "@/lib/api";
+import { TopBar } from "@/lib/ui";
 
 /**
  * The Deconstruction — the demo's opening beat.
  *
  * A discharge summary is a wall of text where the fatal line sits seventh, in
  * the same font as the parking instructions. This screen takes it apart and
- * puts it back together in the order that matters: by what happens if you miss
- * it. The re-ranking IS the product; everything else here stays out of its way.
+ * reassembles it in the order that matters: by what happens if you miss it.
  *
- * Two deliberate choices:
- *   - the measured latency and the model name are printed on screen, always.
- *     If we are going to say "three seconds" on camera, the number had better
- *     be coming from the run the audience just watched.
- *   - instructions arrive staggered, not all at once. Fast enough to feel
- *     instant, slow enough that a viewer's eye lands on the red one first.
+ * The measured latency and model name are always on screen — if a number is
+ * going to be said out loud, it should come from the run the audience watched.
  */
 
 type Instruction = {
@@ -31,8 +27,6 @@ type Instruction = {
   status: string;
   heldReason?: string | null;
   readings?: string[];
-  specialty?: string;
-  daysOut?: number;
 };
 
 type Parsed = {
@@ -74,9 +68,8 @@ export default function Capture() {
       const body = await r.json();
       if (!r.ok) throw new Error(body?.detail ?? `${r.status}`);
       setParsed(body);
-      // Stagger the reveal so the eye lands on the red one first.
       body.instructions.forEach((_: unknown, i: number) =>
-        setTimeout(() => setRevealed(i + 1), 90 + i * 65),
+        setTimeout(() => setRevealed(i + 1), 90 + i * 60),
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -112,38 +105,34 @@ export default function Capture() {
 
   return (
     <main className="theme-family min-h-screen font-sans">
-      <header className="border-b border-fam-line px-6 py-4">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <Link href="/" className="font-display text-lg text-fam-ink">
-            VitaHome
-          </Link>
-          <Link href="/console" className="text-xs text-fam-ink2 hover:text-fam-ink">
-            clinician console →
-          </Link>
-        </div>
-      </header>
+      <TopBar
+        links={[
+          { href: "/today", label: "Today" },
+          { href: "/console", label: "Console" },
+        ]}
+      />
 
-      <div className="mx-auto max-w-3xl px-6 py-10">
+      <div className="mx-auto max-w-3xl px-6 py-12">
         {!parsed && !busy && (
           <>
-            <h1 className="font-display text-3xl leading-tight text-fam-ink">
+            <h1 className="font-display text-3xl font-semibold leading-tight text-fam-ink">
               Photograph the discharge papers.
             </h1>
             <p className="mt-3 max-w-xl leading-relaxed text-fam-ink2">
-              No typing, no forms. We read every instruction on the page and put the
+              No typing, no forms. Every instruction on the page comes back with the
               one that matters most at the top — not the one that was printed first.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 onClick={() => fileRef.current?.click()}
-                className="rounded-fam bg-fam-accent px-5 py-3 font-semibold text-white shadow-fam transition hover:brightness-110"
+                className="rounded-fam bg-fam-accent px-5 py-3 text-sm font-semibold text-fam-bg shadow-sheet transition hover:brightness-110 active:translate-y-px"
               >
                 Take a photo
               </button>
               <button
                 onClick={useSample}
-                className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 font-semibold text-fam-ink transition hover:bg-fam-surface2"
+                className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-medium text-fam-ink transition hover:bg-fam-surface2"
               >
                 Use the sample discharge summary
               </button>
@@ -157,48 +146,49 @@ export default function Capture() {
               />
             </div>
 
-            <p className="mt-6 text-xs leading-relaxed text-fam-ink2">
-              Bring your own. A discharge summary, a medication list, a vaccine
-              schedule — anything a hospital hands someone and expects them to carry
-              out. Where a line can be read two ways, it goes to a clinician rather
-              than being guessed at.
+            <p className="mt-6 max-w-xl text-[12.5px] leading-relaxed text-fam-ink2">
+              Bring your own — a discharge summary, a medication list, a vaccine
+              schedule. Where a line can be read two ways it goes to a clinician,
+              never to a guess. Hand it something that is not medical and it will
+              say so rather than invent instructions.
             </p>
           </>
         )}
 
         {busy && (
-          <div className="py-20 text-center">
-            <div className="font-mono text-5xl tabular-nums text-fam-accent">
-              {(elapsed / 1000).toFixed(2)}s
+          <div className="py-24 text-center">
+            <div className="font-display text-6xl font-semibold tabular-nums text-fam-accent">
+              {(elapsed / 1000).toFixed(2)}
+              <span className="text-3xl">s</span>
             </div>
             <div className="mt-3 animate-breathe text-sm text-fam-ink2">
-              reading the page…
+              reading the page
             </div>
           </div>
         )}
 
         {error && (
-          <div className="rounded-fam border border-fam-danger/30 bg-fam-danger/5 p-4 text-sm text-fam-danger">
+          <div className="rounded-fam border border-fam-danger/40 bg-fam-danger/5 p-4 text-sm text-fam-danger">
             {error}
           </div>
         )}
 
         {parsed && (
           <>
-            <div className="flex flex-wrap items-baseline justify-between gap-3">
-              <h1 className="font-display text-2xl text-fam-ink">
+            <div className="flex flex-wrap items-baseline justify-between gap-3 border-b-2 border-fam-ink pb-3">
+              <h1 className="font-display text-2xl font-semibold text-fam-ink">
                 {parsed.counts.total} instructions, hardest first
               </h1>
-              <div className="font-mono text-xs text-fam-ink2">
+              <span className="font-mono text-[11px] text-fam-ink2">
                 {(parsed.latencyMs / 1000).toFixed(2)}s · {parsed.model}
-              </div>
+              </span>
             </div>
-            <p className="mt-2 text-sm text-fam-ink2">
-              {parsed.documentType} · re-ordered by what happens if it is missed,
-              not by where it appeared on the page.
+            <p className="mt-2 text-[13px] text-fam-ink2">
+              {parsed.documentType} — re-ordered by what happens if it is missed, not
+              by where it appeared on the page.
             </p>
 
-            <ol className="mt-8 space-y-3">
+            <ol className="mt-7 space-y-3">
               {parsed.instructions.slice(0, revealed).map((ins) => (
                 <Card key={ins.id} ins={ins} exact={parsed.lineNumbersExact !== false} />
               ))}
@@ -208,11 +198,11 @@ export default function Capture() {
               <div className="mt-10 flex flex-wrap items-center gap-4 border-t border-fam-line pt-6">
                 <Link
                   href="/console"
-                  className="rounded-fam bg-fam-accent px-5 py-3 font-semibold text-white shadow-fam transition hover:brightness-110"
+                  className="rounded-fam bg-fam-accent px-5 py-3 text-sm font-semibold text-fam-bg shadow-sheet transition hover:brightness-110"
                 >
                   Hand it to the fleet
                 </Link>
-                <span className="text-xs text-fam-ink2">
+                <span className="font-mono text-[11px] text-fam-ink2">
                   {parsed.counts.critical} critical
                   {parsed.counts.heldForHuman > 0 &&
                     ` · ${parsed.counts.heldForHuman} held for a clinician`}
@@ -226,12 +216,7 @@ export default function Capture() {
   );
 }
 
-/**
- * Display-only tidy-up. The stored text is a faithful quote of the page,
- * asterisks and list numbering included, because it has to be findable on the
- * paper in your hand. On screen those artefacts just read as broken markdown,
- * so they are stripped here and nowhere else.
- */
+/** Display-only tidy-up — the stored text stays a faithful quote of the page. */
 function tidy(text: string) {
   return text
     .replace(/\*+/g, "")
@@ -245,30 +230,26 @@ function Card({ ins, exact }: { ins: Instruction; exact: boolean }) {
   const critical = ins.criticality === "CRITICAL";
   const caution = ins.criticality === "caution";
   const held = ins.status === "needs_human";
+  const rail = critical ? "#A23B3B" : caution ? "#96731F" : "#DCD3C0";
 
   return (
     <li
-      className={`animate-lift rounded-fam border bg-fam-surface p-4 ${
-        critical
-          ? "border-fam-danger/40 ring-1 ring-fam-danger/20"
-          : caution
-            ? "border-fam-attn/30"
-            : "border-fam-line"
-      }`}
+      className="animate-rise rounded-fam border border-fam-line bg-fam-surface shadow-sheet"
+      style={{ borderLeft: `3px solid ${rail}` }}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-4 p-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             {critical && (
-              <span className="rounded bg-fam-danger px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">
+              <span className="bg-fam-danger px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-fam-bg">
                 critical
               </span>
             )}
-            <span className="text-[11px] uppercase tracking-wider text-fam-ink2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fam-ink2">
               {TYPE_LABEL[ins.type] ?? ins.type}
             </span>
             {held && (
-              <span className="rounded bg-[#9B7BD1]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#9B7BD1]">
+              <span className="border border-fam-hold/40 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-fam-hold">
                 held for a clinician
               </span>
             )}
@@ -281,26 +262,23 @@ function Card({ ins, exact }: { ins: Instruction; exact: boolean }) {
             {tidy(ins.text)}
           </p>
           {ins.why && (
-            <p className="mt-2 border-l-2 border-fam-danger/40 pl-3 text-sm leading-relaxed text-fam-ink2">
+            <p className="mt-2 border-l-2 border-fam-danger/40 pl-3 text-[13.5px] leading-relaxed text-fam-ink2">
               {ins.why}
             </p>
           )}
           {held && ins.heldReason && (
-            <p className="mt-2 text-sm text-[#7B5BA8]">
+            <p className="mt-2 text-[13px] text-fam-hold">
               {ins.heldReason} — a person decides this, not us.
             </p>
           )}
           {ins.readings && ins.readings.length > 1 && (
-            <ul className="mt-2 space-y-1 text-sm text-fam-ink2">
+            <ul className="mt-2 space-y-1 text-[13px] text-fam-ink2">
               {ins.readings.map((r) => (
-                <li key={r}>· {r}</li>
+                <li key={r}>&mdash; {r}</li>
               ))}
             </ul>
           )}
         </div>
-        {/* A line number is a promise you can check against the paper. For a
-            photograph it is the model counting visible lines, so it is marked
-            approximate rather than quietly presented as exact. */}
         <span
           className="shrink-0 font-mono text-[11px] text-fam-ink2"
           title={exact ? "line in the source document" : "approximate — counted from the photo"}

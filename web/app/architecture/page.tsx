@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { TopBar } from "@/lib/ui";
 
 /**
  * The architecture, drawn to be opened on camera.
@@ -24,25 +24,22 @@ const INK2 = "#8B94A3";
 const LINE = "#2A313D";
 const SURF = "#171C24";
 const ACCENT = "#57A47B";
-const WARN = "#D9A441";
-const DANGER = "#D96C6C";
+const WARN = "#D2A03C";
+const DANGER = "#C9604F";
 const INFO = "#6B9BD1";
-const PURPLE = "#9B7BD1";
+const ROSE = "#C46A8A";
 
 export default function Architecture() {
   return (
     <main className="theme-console min-h-screen">
-      <div className="border-b border-con-line px-6 py-3">
-        <div className="mx-auto flex max-w-6xl items-center justify-between text-xs">
-          <Link href="/" className="text-con-ink2 hover:text-con-ink">
-            ← VitaHome
-          </Link>
-          <div className="font-mono text-con-ink2">architecture</div>
-          <Link href="/console" className="text-con-ink2 hover:text-con-ink">
-            console →
-          </Link>
-        </div>
-      </div>
+      <TopBar
+        dark
+        center="architecture"
+        links={[
+          { href: "/console", label: "Console" },
+          { href: "/console/drill", label: "Chaos panel", tone: "danger" },
+        ]}
+      />
 
       <div className="mx-auto max-w-6xl px-6 py-10">
         <h1 className="font-display text-2xl text-con-ink">How the fleet is wired</h1>
@@ -170,11 +167,11 @@ function Defs() {
 }
 
 const AGENTS: [string, string, string][] = [
-  ["Reconciler", "reconciler", PURPLE],
+  ["Reconciler", "reconciler", ROSE],
   ["Scheduler", "scheduler", ACCENT],
-  ["Pharmacist", "pharmacist", "#D1A15B"],
+  ["Pharmacist", "pharmacist", "#C99A4B"],
   ["Watchman", "watchman", WARN],
-  ["Coach", "coach", "#C97B4A"],
+  ["Coach", "coach", "#5FA9A0"],
   ["Escalator", "escalator", DANGER],
 ];
 

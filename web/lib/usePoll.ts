@@ -3,16 +3,18 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Poll while the tab is visible, and stop the moment it is not.
+ * Poll while the tab is visible; stop the moment it is not.
  *
- * Every console screen here reads real Firestore documents on a timer — the
- * fleet grid alone is around four hundred reads per refresh. A tab left open
- * overnight on a laptop nobody is looking at bills for every one of those and
- * shows them to nobody.
+ * Every console screen reads real Firestore documents on a timer, so a tab
+ * left open overnight would bill for reads nobody sees. Background the tab and
+ * polling stops; return and it refreshes immediately.
  *
- * The Page Visibility API makes that free to avoid: background the tab and the
- * polling stops; come back and it refreshes immediately, so the screen is never
- * stale when someone is actually looking at it.
+ * Two details that exist because their absence looked like a broken app:
+ *  - one fetch always runs on mount, even if the document reports itself
+ *    hidden (embedded previews and some webviews do), so the screen never
+ *    sits on placeholder dashes with a working backend behind it.
+ *  - window focus also triggers a refresh, so alt-tabbing back never shows
+ *    stale numbers.
  */
 export function usePoll(fn: () => void | Promise<void>, ms: number) {
   const saved = useRef(fn);
@@ -28,18 +30,23 @@ export function usePoll(fn: () => void | Promise<void>, ms: number) {
 
     const start = () => {
       if (timer) return;
-      void saved.current();          // refresh on resume, not on the next tick
+      void saved.current();
       timer = setInterval(() => void saved.current(), ms);
     };
 
     const onVisibility = () =>
       document.visibilityState === "visible" ? start() : stop();
+    const onFocus = () => void saved.current();
 
-    onVisibility();
+    void saved.current(); // always at least once — see note above
+    if (document.visibilityState === "visible") start();
+
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
     return () => {
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
     };
   }, [ms]);
 }

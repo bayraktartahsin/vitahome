@@ -1,29 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { API } from "@/lib/api";
 import { usePoll } from "@/lib/usePoll";
+import { AGENTS, AgentMark, Btn, StatusLine, TopBar, post, useRunner } from "@/lib/ui";
 
 /**
  * The chaos panel. We hand this to the judge.
  *
- * Recovery here is infrastructure, not choreography: killing a worker leaves the
- * Pub/Sub message unacked, Cloud Run starts a fresh container, and the ledger
- * skips every step that already completed. Nothing is simulated.
+ * Recovery here is infrastructure, not choreography: killing a worker leaves
+ * the Pub/Sub message unacked, Cloud Run starts a fresh container, and the
+ * ledger skips every step that already completed. Nothing is simulated.
  */
 
-const AGENTS = [
-  { id: "scheduler",  glyph: "📅", label: "Scheduler",  note: "books appointments · has a live task most often" },
-  { id: "reconciler", glyph: "💊", label: "Reconciler", note: "checks medications" },
-  { id: "pharmacist", glyph: "🏥", label: "Pharmacist", note: "routes prescriptions" },
-  { id: "watchman",   glyph: "👁", label: "Watchman",   note: "monitors red flags" },
-  { id: "coach",      glyph: "🗣", label: "Coach",      note: "daily check-ins" },
-  { id: "escalator",  glyph: "🚨", label: "Escalator",  note: "pages a human" },
-];
+const KILLABLE = ["scheduler", "reconciler", "pharmacist", "watchman", "coach", "escalator"];
 
 type Task = {
-  taskId: string; agent: string; status: string; attempt?: number;
+  taskId: string;
+  agent: string;
+  status: string;
+  attempt?: number;
   steps?: { name: string; idempotencyKey: string; externalRef?: string }[];
 };
 
@@ -31,7 +27,7 @@ export default function Drill() {
   const [patient] = useState("p_hero");
   const [tasks, setTasks] = useState<Task[]>([]);
   const [log, setLog] = useState<string[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
+  const { busy, note, run } = useRunner();
 
   const say = (s: string) =>
     setLog((l) => [`${new Date().toLocaleTimeString()}  ${s}`, ...l].slice(0, 12));
@@ -40,140 +36,134 @@ export default function Drill() {
     try {
       const r = await fetch(`${API}/patient/${patient}/tasks`, { cache: "no-store" });
       if (r.ok) setTasks((await r.json()).tasks ?? []);
-    } catch {}
+    } catch {
+      /* keep last frame */
+    }
   }
 
   usePoll(poll, 2500);
 
-  async function seedAndDispatch() {
-    setBusy("dispatch");
-    say("seeding hero patient…");
-    await fetch(`${API}/demo/seed`, { method: "POST" }).catch(() => {});
-    say("dispatching Scheduler task (cardiology, 7 days)");
-    await fetch(`${API}/demo/dispatch`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        patientId: patient, agent: "scheduler", instructionId: "i_07",
+  const start = () =>
+    run("start", "seeding and dispatching a Scheduler task", async () => {
+      say("seeding the hero patient");
+      await post("/demo/seed");
+      say("dispatching a Scheduler task — cardiology, 7 days");
+      await post("/demo/dispatch", {
+        patientId: patient,
+        agent: "scheduler",
+        instructionId: "i_07",
         payload: { specialty: "cardiology", daysOut: 7 },
-      }),
-    }).catch(() => {});
-    say("drill window opens on the FHIR step — kill whenever you like");
-    setBusy(null);
-  }
+      });
+      say("task in flight — the armed step will die when it is reached");
+    });
 
-  async function arm(agent: string) {
-    setBusy(agent);
-    say(`☠︎ ${agent} armed — it will die inside its next step`);
-    await fetch(`${API}/chaos/arm?agent=${agent}&patientId=${patient}`, {
-      method: "POST",
-    }).catch(() => say("could not arm — is the gateway up?"));
-    say("now press “Start a task” and watch it die mid-step");
-    setBusy(null);
-  }
+  const arm = (agent: string) =>
+    run(`arm-${agent}`, `arming ${agent}`, async () => {
+      await post(`/chaos/arm?agent=${agent}&patientId=${patient}&step=fhir_appointment`);
+      say(`${agent} armed — it will die inside its next step`);
+      say("now press Start a task and watch the audit stream");
+    });
 
-  async function killNow(agent: string) {
-    setBusy(agent);
-    say(`💀 killing ${agent} now — real process exit, no cleanup`);
-    // The process dies mid-request, so this fetch is expected to fail. That's the point.
-    await fetch(`${API}/chaos/kill?agent=${agent}&patientId=${patient}`, {
-      method: "POST",
-    }).catch(() => say("connection dropped — the worker is gone"));
-    setBusy(null);
-  }
+  const killNow = (agent: string) =>
+    run(`kill-${agent}`, `killing ${agent}`, async () => {
+      say(`killing ${agent} now — real process exit, no cleanup`);
+      // The process dies mid-request; the fetch failing IS the success case.
+      await fetch(`${API}/chaos/kill?agent=${agent}&patientId=${patient}`, {
+        method: "POST",
+      }).catch(() => say("connection dropped — the worker is gone"));
+    });
 
   const live = tasks.filter((t) => t.status === "leased" || t.status === "pending");
 
   return (
-    <main className="theme-console min-h-screen">
-      <div className="border-b border-con-line px-6 py-3">
-        <div className="mx-auto flex max-w-6xl items-center justify-between text-xs">
-          <Link href="/console" className="text-con-ink2 hover:text-con-ink">← console</Link>
-          <div className="font-mono text-con-ink2">chaos panel · failure drill</div>
-          <div className="font-mono text-con-ink2">{patient}</div>
-        </div>
-      </div>
+    <main className="theme-console min-h-screen font-sans">
+      <TopBar
+        dark
+        center="chaos panel · the failure drill"
+        links={[
+          { href: "/console", label: "Console" },
+          { href: "/console/fleets", label: "All fleets" },
+        ]}
+      />
 
-      <div className="mx-auto max-w-6xl px-6 py-8">
-        <h1 className="text-xl font-semibold">Kill an agent. Any agent. Whenever you like.</h1>
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-con-ink2">
-          These buttons terminate a real worker process with no cleanup. Recovery is not
-          scripted: the Pub/Sub message goes unacked, Cloud Run starts a fresh container,
-          and the task ledger skips every step that already completed. The appointment is
-          booked exactly once no matter when you pull the trigger.
+      <div className="mx-auto max-w-6xl px-5 py-8">
+        <h1 className="font-display text-2xl font-semibold text-con-ink">
+          Kill an agent. Any agent. Whenever you like.
+        </h1>
+        <p className="mt-2 max-w-2xl text-[13.5px] leading-relaxed text-con-ink2">
+          These buttons terminate a real worker process with no cleanup. Recovery is
+          not scripted: the Pub/Sub message goes unacked, Cloud Run starts a fresh
+          container, and the ledger skips every step that already completed. The
+          appointment is booked exactly once no matter when you pull the trigger.
         </p>
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            onClick={seedAndDispatch}
-            disabled={busy !== null}
-            className="rounded-con bg-con-accent/15 px-4 py-2 text-sm font-semibold text-con-accent ring-1 ring-con-accent/40 transition hover:bg-con-accent/25 disabled:opacity-40"
-          >
-            ▸ Start a task
-          </button>
-          <span className="self-center font-mono text-xs text-con-ink2">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <Btn dark kind="solid" busy={busy === "start"} onClick={start}>
+            Start a task
+          </Btn>
+          <span className="font-mono text-[11px] text-con-ink2">
             {live.length > 0
-              ? `${live.length} task(s) in flight — now kill something`
+              ? `${live.length} task(s) in flight`
               : "no task in flight"}
           </span>
+          <StatusLine dark note={note} />
         </div>
 
-        <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {AGENTS.map((a) => (
+        {/* ------------------------------------------------------ roster --- */}
+        <section className="mt-8 overflow-hidden rounded-con border border-con-line">
+          {KILLABLE.map((id, i) => (
             <div
-              key={a.id}
-              className="rounded-con border border-con-danger/30 bg-con-surface p-4 transition hover:border-con-danger/60"
+              key={id}
+              className={`flex items-center gap-3 bg-con-panel px-4 py-3 ${
+                i > 0 ? "border-t border-con-line" : ""
+              }`}
             >
-              <div className="text-sm font-semibold text-con-ink">
-                {a.glyph} {a.label}
-              </div>
-              <div className="mt-1 text-[11px] text-con-ink2">{a.note}</div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => arm(a.id)}
-                  disabled={busy !== null}
-                  className="flex-1 rounded bg-con-danger/15 px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-con-danger ring-1 ring-con-danger/40 transition hover:bg-con-danger/25 disabled:opacity-40"
-                >
+              <AgentMark agent={id} />
+              <span className="w-24 text-[13px] font-medium text-con-ink">
+                {AGENTS[id].name}
+              </span>
+              <span className="hidden flex-1 truncate font-mono text-[11px] text-con-ink2 md:block">
+                {AGENTS[id].duty}
+              </span>
+              <div className="ml-auto flex gap-2">
+                <Btn dark kind="danger" busy={busy === `arm-${id}`} onClick={() => arm(id)}
+                     title="Dies inside its next step — deterministic, still a real crash">
                   arm
-                </button>
-                <button
-                  onClick={() => killNow(a.id)}
-                  disabled={busy !== null}
-                  className="rounded px-2 py-1.5 font-mono text-[10px] uppercase tracking-widest text-con-ink2 transition hover:text-con-danger disabled:opacity-40"
-                  title="Kill immediately — may hit an idle instance"
-                >
+                </Btn>
+                <Btn dark kind="ghost" busy={busy === `kill-${id}`} onClick={() => killNow(id)}
+                     title="Kill immediately — may land on an idle instance">
                   kill now
-                </button>
+                </Btn>
               </div>
             </div>
           ))}
-        </div>
+        </section>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <section>
-            <h2 className="font-mono text-xs uppercase tracking-widest text-con-ink2">
+            <h2 className="border-b border-con-line pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-con-ink2">
               tasks
             </h2>
             <div className="mt-3 space-y-2">
               {tasks.length === 0 && (
                 <div className="rounded-con border border-dashed border-con-line p-6 text-center font-mono text-xs text-con-ink2">
-                  no tasks yet — press “Start a task”
+                  no tasks yet — press Start a task
                 </div>
               )}
               {tasks.slice(-6).reverse().map((t) => (
-                <div key={t.taskId} className="rounded-con border border-con-line bg-con-surface p-3">
-                  <div className="flex items-center justify-between font-mono text-xs">
+                <div key={t.taskId} className="rounded-con border border-con-line bg-con-panel p-3">
+                  <div className="flex items-center justify-between font-mono text-[11px]">
                     <span className="text-con-ink2">{t.taskId}</span>
-                    <StatusChip status={t.status} />
+                    <StatusTag status={t.status} />
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {(t.steps ?? []).map((s) => (
                       <span
                         key={s.name}
                         title={s.idempotencyKey}
-                        className="rounded bg-con-accent/15 px-1.5 py-0.5 font-mono text-[10px] text-con-accent"
+                        className="border border-con-accent/40 bg-con-accent/10 px-1.5 py-0.5 font-mono text-[10px] text-con-accent"
                       >
-                        ✓ {s.name}
+                        {s.name}
                       </span>
                     ))}
                     {(t.steps ?? []).length === 0 && (
@@ -181,8 +171,8 @@ export default function Drill() {
                     )}
                   </div>
                   {(t.attempt ?? 1) > 1 && (
-                    <div className="mt-2 font-mono text-[10px] text-con-warn">
-                      🔁 attempt {t.attempt} — recovered after a worker died
+                    <div className="mt-2 font-mono text-[10px] uppercase tracking-wide text-con-warn">
+                      attempt {t.attempt} — recovered after a worker died
                     </div>
                   )}
                 </div>
@@ -191,20 +181,20 @@ export default function Drill() {
           </section>
 
           <section>
-            <h2 className="font-mono text-xs uppercase tracking-widest text-con-ink2">
+            <h2 className="border-b border-con-line pb-2 font-mono text-[11px] uppercase tracking-[0.18em] text-con-ink2">
               operator log
             </h2>
             <div className="mt-3 rounded-con border border-con-line bg-con-bg p-3 font-mono text-[11px] leading-relaxed">
-              {log.length === 0 && <span className="text-con-ink2">—</span>}
+              {log.length === 0 && <span className="text-con-ink2">&mdash;</span>}
               {log.map((l, i) => (
                 <div key={i} className="text-con-ink2">
                   {l}
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[11px] leading-relaxed text-con-ink2">
-              Full audit trail, including the gap left by the dead worker, is on the
-              patient page. The gap is never erased — it is the proof.
+            <p className="mt-3 text-[11.5px] leading-relaxed text-con-ink2">
+              The full audit trail — including the gap the dead worker leaves — is on
+              the patient console. The gap is never erased; the scar is the proof.
             </p>
           </section>
         </div>
@@ -213,17 +203,22 @@ export default function Drill() {
   );
 }
 
-function StatusChip({ status }: { status: string }) {
+function StatusTag({ status }: { status: string }) {
   const map: Record<string, string> = {
-    done: "text-con-accent bg-con-accent/15",
-    leased: "text-con-info bg-con-info/15",
-    pending: "text-con-ink2 bg-white/5",
-    refused: "text-[#9B7BD1] bg-[#9B7BD1]/15",
-    escalated: "text-con-warn bg-con-warn/15",
-    failed: "text-con-danger bg-con-danger/15",
+    done: "text-con-accent border-con-accent/40",
+    leased: "text-con-info border-con-info/40",
+    pending: "text-con-ink2 border-con-line",
+    refused: "text-con-hold border-con-hold/40",
+    escalated: "text-con-warn border-con-warn/40",
+    resolved: "text-con-ink2 border-con-line",
+    failed: "text-con-danger border-con-danger/40",
   };
   return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${map[status] ?? "text-con-ink2 bg-white/5"}`}>
+    <span
+      className={`border px-1.5 py-0.5 text-[10px] uppercase tracking-wider ${
+        map[status] ?? "border-con-line text-con-ink2"
+      }`}
+    >
       {status}
     </span>
   );
