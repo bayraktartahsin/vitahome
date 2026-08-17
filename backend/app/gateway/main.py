@@ -519,15 +519,22 @@ def demo_book_followups(patientId: str = "p_hero"):
 # ------------------------------------------------------------ the drill ----
 
 @app.post("/chaos/arm")
-def chaos_arm(agent: str = "scheduler", patientId: str | None = None):
-    """Arm an agent to die inside its next step.
+def chaos_arm(agent: str = "scheduler", patientId: str | None = None,
+              step: str | None = "fhir_appointment"):
+    """Arm an agent to die inside a named step.
 
     Deterministic and still a genuine ungraceful exit — the worker kills itself
     mid-step, before the side effect, with the Pub/Sub message unacked.
+
+    The step defaults to the Scheduler's SECOND step on purpose. Killing on the
+    first one proves redelivery but leaves nothing completed, so the replay has
+    nothing to skip — and "already-done work is not repeated" is the whole point
+    of the exercise. Pass step= for a different agent, or step=  (empty) to die
+    on whichever step comes first.
     """
     if agent not in AGENT_NAMES:
         raise HTTPException(404, "unknown agent")
-    return chaos.arm(agent, patientId)
+    return chaos.arm(agent, patientId, step or None)
 
 
 @app.post("/chaos/disarm")

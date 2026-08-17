@@ -25,8 +25,8 @@ curl -s --max-time 90 -X POST "$G/demo/seed" \
   | python3 -c "import sys,json;d=json.load(sys.stdin);print(f\"  patient={d['patientId']} instructions={d['instructions']} critical={d['critical']}\")"
 
 if [ "$MODE" = "drill" ]; then
-  b "▸ arming the Scheduler — it will die inside its next step"
-  curl -s --max-time 30 -X POST "$G/chaos/arm?agent=scheduler&patientId=$PID" \
+  b "▸ arming the Scheduler — it will die inside '${STEP:-fhir_appointment}'"
+  curl -s --max-time 30 -X POST "$G/chaos/arm?agent=scheduler&patientId=$PID&step=${STEP:-fhir_appointment}" \
     | python3 -c "import sys,json;print('  '+json.load(sys.stdin)['note'])"
 fi
 

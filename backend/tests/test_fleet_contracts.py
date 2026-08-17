@@ -92,3 +92,34 @@ def test_safety_language_present_in_instructions(name):
     instruction = registry._SPEC[name][5].lower()
     assert any(p in instruction for p in
                ("do not guess", "never choose", "never resolve", "refuse")), name
+
+
+# --------------------------------------------------------- the armed drill
+
+def test_the_arm_can_target_a_specific_step(monkeypatch):
+    """Without a target the arm fires on whichever step runs first, which for
+    the Scheduler is step one of three. The task then dies before anything has
+    completed and the replay has nothing to skip — so three perfect-looking
+    drill runs demonstrated redelivery and never once demonstrated the property
+    the drill exists to prove."""
+    from app.fleet import chaos
+
+    monkeypatch.setattr(chaos, "armed",
+                        lambda: {"agent": "scheduler", "step": "fhir_appointment"})
+    # An earlier step must be allowed to complete...
+    assert chaos.consume_if_armed("scheduler", "p", "t", "resolve_provider") is False
+    # ...and a different agent is never affected.
+    assert chaos.consume_if_armed("watchman", "p", "t", "fhir_appointment") is False
+
+
+def test_an_untargeted_arm_still_fires_on_the_first_step(monkeypatch):
+    """The old behaviour stays available — it is the right one for an agent
+    whose steps you do not know."""
+    from app.fleet import chaos
+    monkeypatch.setattr(chaos, "armed", lambda: {"agent": "scheduler", "step": None})
+    killed = {}
+    monkeypatch.setattr(chaos, "_doc", lambda: type("D", (), {"delete": lambda s: None})())
+    monkeypatch.setattr(chaos, "audit", lambda *a, **k: None)
+    monkeypatch.setattr(chaos.os, "_exit", lambda code: killed.setdefault("code", code))
+    chaos.consume_if_armed("scheduler", "p", "t", "resolve_provider")
+    assert killed["code"] == 1

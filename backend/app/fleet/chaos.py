@@ -47,20 +47,37 @@ def _doc():
     return db().collection(_ARMED_DOC[0]).document(_ARMED_DOC[1])
 
 
-def arm(agent: str, patient_id: str | None = None) -> dict[str, Any]:
-    """Mark ``agent`` to die inside its next step. Shared across instances."""
+def arm(agent: str, patient_id: str | None = None,
+        step: str | None = None) -> dict[str, Any]:
+    """Mark ``agent`` to die inside a specific step. Shared across instances.
+
+    ``step`` matters more than it looks. Without it the arm fires on whichever
+    step comes first — which for the Scheduler is ``resolve_provider``, step one
+    of three. The task then dies before anything has completed, and the replay
+    starts from scratch with nothing to skip.
+
+    That still demonstrates redelivery and no-duplicate booking, but it silently
+    fails to demonstrate the thing the drill exists for: that work already done
+    is *not repeated*. Three consecutive drill runs looked perfect and never
+    once produced a skip, because the kill kept landing on step one.
+
+    Targeting step two means step one is committed to the ledger before the
+    process dies, so the replay has something real to skip.
+    """
     _doc().set({
         "agent": agent,
+        "step": step,
         "armedAt": datetime.now(timezone.utc),
         "patientId": patient_id,
     })
-    log.warning("chaos armed for agent=%s", agent)
+    log.warning("chaos armed for agent=%s step=%s", agent, step or "<first>")
+    where = f"inside step '{step}'" if step else "inside its next step"
     if patient_id:
         audit(patient_id, "action", agent,
-              f"chaos armed — {agent} will be killed inside its next step", None,
-              {"drill": True})
-    return {"armed": agent,
-            "note": "the next task this agent picks up will die mid-step"}
+              f"chaos armed — {agent} will be killed {where}", None,
+              {"drill": True, "step": step})
+    return {"armed": agent, "step": step,
+            "note": f"the next task this agent picks up will die {where}"}
 
 
 def disarm() -> dict[str, Any]:
@@ -68,17 +85,29 @@ def disarm() -> dict[str, Any]:
     return {"armed": None}
 
 
-def armed_agent() -> str | None:
+def armed() -> dict[str, Any] | None:
     try:
         snap = _doc().get()
-        return (snap.to_dict() or {}).get("agent") if snap.exists else None
+        return (snap.to_dict() or {}) if snap.exists else None
     except Exception:  # noqa: BLE001 — chaos must never break the fleet
         return None
 
 
+def armed_agent() -> str | None:
+    return (armed() or {}).get("agent")
+
+
 def consume_if_armed(agent: str, patient_id: str, task_id: str, step_name: str) -> bool:
-    """If this agent is armed, record it, clear the arm, and die. Returns False otherwise."""
-    if armed_agent() != agent:
+    """If this agent is armed for this step, record it, clear the arm, and die.
+
+    Returns False otherwise — including when the agent is armed but for a later
+    step, which is how earlier steps get to complete and be skipped on replay.
+    """
+    a = armed() or {}
+    if a.get("agent") != agent:
+        return False
+    target = a.get("step")
+    if target and target != step_name:
         return False
     try:
         _doc().delete()                      # one-shot: never a kill loop
