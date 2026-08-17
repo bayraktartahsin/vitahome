@@ -64,11 +64,14 @@ gcloud secrets add-iam-policy-binding gemini-api-key \
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member="serviceAccount:${SA}" --role=roles/healthcare.fhirResourceEditor >/dev/null
 
+# --cpu-boost is doing real work here. Without it a cold start runs ~8s and you
+# end up pinning min-instances=1 to hide it, which bills ~$23/month to serve
+# nobody. With it, cold start is ~0.7s and the services can sleep.
 echo "▸ deploying gateway"
 gcloud run deploy vitahome-gateway --source ./backend \
   --project "$PROJECT" --region "$REGION" --platform managed --allow-unauthenticated \
   --port 8080 --memory 1Gi --cpu 1 --timeout 300 --concurrency 40 \
-  --min-instances 1 --max-instances 10 \
+  --min-instances 0 --max-instances 20 --cpu-boost \
   --set-env-vars "GCP_PROJECT=${PROJECT},REGION=${REGION},HC_LOCATION=${HC_LOCATION},HC_DATASET=${DATASET},HC_FHIR_STORE=${FHIR_STORE},MODEL_FAST=gemini-3.5-flash-lite,MODEL_REASON=gemini-3.7-flash,LOG_LEVEL=INFO" \
   --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" --quiet
 
@@ -79,7 +82,7 @@ echo "▸ deploying web"
 gcloud run deploy vitahome-web --source ./web \
   --project "$PROJECT" --region "$REGION" --platform managed --allow-unauthenticated \
   --port 8080 --memory 512Mi --cpu 1 --timeout 60 \
-  --min-instances 1 --max-instances 10 --quiet
+  --min-instances 0 --max-instances 10 --cpu-boost --quiet
 
 WEB_URL="$(gcloud run services describe vitahome-web --region "$REGION" \
   --project "$PROJECT" --format='value(status.url)')"
@@ -107,6 +110,45 @@ for a in reconciler scheduler pharmacist watchman coach escalator; do
     echo "  sub-$a updated"
   fi
 done
+
+echo "▸ Firestore index: collection-group query on task status"
+# The supervisor sweeps every patient's tasks at once with a collection_group
+# query. Firestore auto-indexes single fields per collection but NOT across a
+# collection group, so this exemption has to be created explicitly.
+#
+# Skipping it does not fail loudly — the endpoint simply 500s with
+# FailedPrecondition the first time anything calls it, which in this project was
+# not until the supervisor was finally scheduled.
+curl -s -X PATCH \
+  "https://firestore.googleapis.com/v1/projects/$PROJECT/databases/(default)/collectionGroups/tasks/fields/status?updateMask=indexConfig" \
+  -H "Authorization: Bearer $(gcloud auth print-access-token)" \
+  -H "Content-Type: application/json" \
+  -d '{"indexConfig":{"indexes":[
+        {"queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"ASCENDING"}]},
+        {"queryScope":"COLLECTION","fields":[{"fieldPath":"status","order":"DESCENDING"}]},
+        {"queryScope":"COLLECTION_GROUP","fields":[{"fieldPath":"status","order":"ASCENDING"}]}
+      ]}}' >/dev/null
+echo "  index requested (builds in the background, ~4 min)"
+
+echo "▸ Cloud Scheduler — the supervisor sweep"
+# The chaos panel writes its own AGENT_DOWN before the process exits, so the
+# demo never depends on this. It is the net for a REAL crash — an OOM kill, a
+# container eviction — where nothing gets the chance to write anything. Without
+# it a stale lease is invisible.
+#
+# Five minutes, not five seconds: detection latency does not need to be tight,
+# and a tighter schedule would wake a scale-to-zero service constantly for no
+# benefit.
+gcloud scheduler jobs create http vitahome-supervisor \
+  --project "$PROJECT" --location "$REGION" \
+  --schedule="*/5 * * * *" \
+  --uri="${GATEWAY_URL}/supervisor/scan" \
+  --http-method=POST --attempt-deadline=60s \
+  --quiet 2>/dev/null \
+  || gcloud scheduler jobs update http vitahome-supervisor \
+       --project "$PROJECT" --location "$REGION" \
+       --uri="${GATEWAY_URL}/supervisor/scan" --quiet >/dev/null
+echo "  supervisor sweep every 5 min"
 
 echo
 echo "✅ VitaHome is up"

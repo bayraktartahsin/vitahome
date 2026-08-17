@@ -170,6 +170,11 @@ def parse(pid: str, *, text: str | None = None, image: bytes | None = None,
     if image is None and not (text or "").strip():
         raise gemini.ModelError("nothing to parse — provide an image or document text")
 
+    # Text is pre-numbered so the model only has to copy; an image has nothing
+    # to copy from, so it counts visible lines and the result is approximate.
+    # The UI needs to know which, because "line 7" printed next to an
+    # instruction is a promise you can check against the paper in your hand.
+    exact = image is None
     prompt = (PROMPT if image is not None
               else f"{PROMPT}\n\n--- DOCUMENT (line numbers are given) ---\n{_number_lines(text)}")
     out, meta = gemini.generate_json(
@@ -205,6 +210,7 @@ def parse(pid: str, *, text: str | None = None, image: bytes | None = None,
             "documentType": out.get("documentType"),
             "parsedAt": datetime.now(timezone.utc),
             "parserVersion": "parser-v1",
+            "lineNumbersExact": exact,
             "parserModel": meta["model"],
             "parseLatencyMs": meta["latencyMs"],
             "instructions": instructions,
@@ -223,6 +229,7 @@ def parse(pid: str, *, text: str | None = None, image: bytes | None = None,
         "instructions": instructions,
         "counts": {"total": len(instructions), "critical": len(critical),
                    "heldForHuman": len(held)},
+        "lineNumbersExact": exact,
         "model": meta["model"],
         "latencyMs": meta["latencyMs"],
     }

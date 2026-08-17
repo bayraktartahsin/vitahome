@@ -41,6 +41,7 @@ type Parsed = {
   counts: { total: number; critical: number; heldForHuman: number };
   model: string;
   latencyMs: number;
+  lineNumbersExact?: boolean;
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -199,7 +200,7 @@ export default function Capture() {
 
             <ol className="mt-8 space-y-3">
               {parsed.instructions.slice(0, revealed).map((ins) => (
-                <Card key={ins.id} ins={ins} />
+                <Card key={ins.id} ins={ins} exact={parsed.lineNumbersExact !== false} />
               ))}
             </ol>
 
@@ -240,7 +241,7 @@ function tidy(text: string) {
     .trim();
 }
 
-function Card({ ins }: { ins: Instruction }) {
+function Card({ ins, exact }: { ins: Instruction; exact: boolean }) {
   const critical = ins.criticality === "CRITICAL";
   const caution = ins.criticality === "caution";
   const held = ins.status === "needs_human";
@@ -297,9 +298,14 @@ function Card({ ins }: { ins: Instruction }) {
             </ul>
           )}
         </div>
-        {/* Line number, so any line can be checked against the paper in your hand. */}
-        <span className="shrink-0 font-mono text-[11px] text-fam-ink2">
-          line {ins.lineNo}
+        {/* A line number is a promise you can check against the paper. For a
+            photograph it is the model counting visible lines, so it is marked
+            approximate rather than quietly presented as exact. */}
+        <span
+          className="shrink-0 font-mono text-[11px] text-fam-ink2"
+          title={exact ? "line in the source document" : "approximate — counted from the photo"}
+        >
+          {exact ? "" : "~"}line {ins.lineNo}
         </span>
       </div>
     </li>
