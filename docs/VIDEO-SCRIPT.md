@@ -1,418 +1,129 @@
-# VitaHome — demo script
+# Recording the demo — the simple version
 
-One take. Nothing cut, nothing sped up. The rules ask for an unedited live demo,
-and an unedited demo is also the strongest possible claim: everything you are
-about to watch is happening on Google Cloud while I talk.
+You do three things, in this order:
 
-Target: **4:00**. Hard ceiling 4:30.
+1. **One-time setup** (~10 minutes, only once)
+2. **Pre-take checklist** (~3 minutes, every time)
+3. **The take** (~4½ minutes) — a teleprompter tells you every word and every click
 
----
-
-## The rule that shapes every beat
-
-The fleet is fast. A booking lands in under two seconds; the parse is about one.
-If I narrate while it runs, I am talking over the proof and the video becomes a
-voiceover with a progress bar behind it.
-
-So every beat is built the same way:
-
-> **SET UP** — say what is about to happen, and what would make it fail.
-> **WATCH** — press the button. Stop talking. Let it land.
-> **PAY OFF** — say what just happened and why it was hard.
-
-The silence in the middle is not dead air. It is the evidence. Rehearse holding
-it — three seconds of quiet feels like thirty from behind the camera and like
-nothing at all to the person watching.
+The teleprompter is built into the app: **open `/director` on the web app.**
+It shows one cue at a time in huge text — `SAY` means read it aloud, `DO` means
+one click, `SILENCE` means say nothing. Press the **right-arrow key** to move to
+the next cue. You never have to remember anything.
 
 ---
 
-## Before you hit record
+## 1 · One-time setup
 
-- [ ] `./scripts/preflight.sh` green — every service, FHIR store, and subscription live
-- [ ] Hero patient seeded, ledger reset to zero
-- [ ] Phone in frame, unlocked, **Google Calendar app installed and signed in to
-  the account the fleet's calendar is shared with** (open
-  `/demo/calendar` on the gateway, open the `link` it returns on the phone once,
-  add the calendar — one-time setup). Rehearse: book once, pull to refresh,
-  watch the event appear.
-- [ ] Browser: two windows side by side — family view left, clinician console right
-- [ ] Zoom to 125%. Judges watch on laptops.
-- [ ] The paper discharge summary physically in your hand
-- [ ] Close Slack, mail, everything with a badge
-- [ ] One rehearsal of the Failure Drill, then reset. Never demo a drill you have not run that day.
+### A. Put the fleet's calendar on your phone (5 min)
 
----
+The demo shows appointments appearing in your phone's Google Calendar. For that,
+your phone needs the fleet's calendar once.
 
-## 0:00 — The ten-second challenge
+**The calendar is shared with `info@gravitilabs.com`.** If your phone's Google
+Calendar is signed into a different Gmail, tell Claude that address first — it
+is a one-line change.
 
-**SET UP** *(hold the paper up to camera)*
+On your **phone**:
 
-> This is a discharge summary. A dozen instructions on it. At least one of them
-> kills him if it gets missed.
->
-> Find it. You have ten seconds.
+1. Open the **Gmail** app for `info@gravitilabs.com`. Find the email from
+   Google Calendar — subject like *"…has shared a calendar with you"*
+   ("VitaHome — appointments (demo)"). Tap **Add this calendar**. Done — skip
+   to step 4.
+2. No email? Open this link in your phone's browser (signed in as
+   info@gravitilabs.com):
 
-*(Say "a dozen", not a specific number. The parse is live and the model splits
-borderline lines differently between runs — it has come back with twelve and
-with thirteen. Naming an exact count on camera invites a mismatch with the
-screen thirty seconds later, over something that does not matter.)*
+   https://calendar.google.com/calendar/u/0/r?cid=NzEyNDFkMDAxMjNkOGE1MDE2OTkzZWVkNmQzODIyMTViN2Q1NDc4ZDJjMTQ0YjExYjJkMWViN2ZiNDJmODZiZEBncm91cC5jYWxlbmRhci5nb29nbGUuY29t
 
-*(Hold the paper still. Say nothing. Count ten in your head — actually count,
-do not guess. This silence is the whole opening.)*
+   When it asks to add "VitaHome — appointments (demo)", tap **Add**.
+3. Still nothing? Do it on a computer at calendar.google.com — the calendar is
+   already under **"Other calendars"** on the left. Then on the phone:
+   Google Calendar app → **☰ menu** → **Settings** → under info@gravitilabs.com
+   find **VitaHome — appointments (demo)** → turn **Sync ON**.
+4. **Test it:** on your Mac open the app → `/console` → click **seed patient**,
+   then **book follow-ups**. Wait 20 seconds. On the phone, open Google
+   Calendar and **pull down to refresh** — appointments appear next week
+   (around Tue/Thu 10:00). If you see them, you are done forever.
 
-**PAY OFF**
+### B. Print the paper prop (2 min)
 
-> It took me three readings.
->
-> If you have ever stood in a hospital corridor holding your parent's paperwork,
-> you already know this feeling. I was in another country when my family got
-> this one.
+Print [`docs/discharge-summary.txt`](discharge-summary.txt) — one page. This is
+the paper you hold up at the start and the end.
 
-*(Say that once. Flat. Do not add to it, do not repeat it later. The paper comes
-back at the end as a prop, the sentence does not.)*
+### C. Know your recorder (2 min)
 
----
+Use **QuickTime**, already on your Mac:
 
-## 0:30 — The photograph
+1. Open QuickTime Player → **File → New Screen Recording**.
+2. Click **Options** → under Microphone pick your mic (MacBook microphone is fine).
+3. Choose **Record Selected Window**... actually simplest: record the whole
+   second screen/window area where the stage browser lives.
+4. To stop: click the ⏺ stop icon in the menu bar.
 
-**SET UP**
+Phone-in-frame moments: just hold the phone up to your Mac's camera? No — the
+recording is your screen. **Two easy options, pick one:**
 
-> So I photograph it.
->
-> No typing, no forms, no chat window. The document is the interface.
-
-**WATCH** *(take the photo, upload, stop talking)*
-
-*(About three seconds. The page deconstructs into individual instructions,
-re-sorted by what happens if you miss them. The ticagrelor line lands at the
-top, in red, with a plain-language sentence under it.)*
-
-**PAY OFF**
-
-> Three seconds.
-
-*(Read the timer off the screen — the UI prints the measured latency and the
-model name, so say whatever it actually shows. Measured on this document:
-2.8-3.3 seconds warm, on gemini-3.5-flash-lite. Do not say "one second"; the
-one-second figure was a shorter test prompt and it is not what this does.)*
-
-> Top of the list, in red — do not stop ticagrelor. That is the one. Stopping a
-> blood thinner early after a stent is how people die in the month after they
-> get sent home feeling fine.
->
-> It is first not because it appears first. On the paper it is seventh, in the
-> same font as "no lifting over ten pounds". It is first here because it is
-> fatal. The fleet re-ranks the page by consequence.
->
-> And that sentence underneath it is not on the document. That is the fleet
-> explaining, to a frightened family member at midnight, what actually happens
-> if they get it wrong.
+- **Easiest:** put your phone screen next to the browser using **QuickTime →
+  File → New Movie Recording → camera dropdown → your iPhone** (connect by
+  cable). Size that window small, park it in a corner of the stage screen. Your
+  phone's screen is now visible inside the recording the whole time.
+- Or skip the phone window and, at the phone moments, open
+  calendar.google.com in a stage-browser tab instead — same calendar, still
+  real, slightly less dramatic.
 
 ---
 
-## 1:00 — Execution, counted out loud
+## 2 · Pre-take checklist — every time
 
-**SET UP**
+In Terminal, inside the `vitahome` folder:
 
-> Now the part nobody does. Somebody has to actually carry those instructions
-> out — book the cardiology follow-up, reconcile what he takes against what he
-> was taking, route the prescriptions, arm monitoring for the specific warning
-> signs on this specific document.
->
-> That is usually a daughter with a full-time job and a phone tree.
->
-> Watch the counter, and watch my phone.
+```bash
+./scripts/preflight.sh
+```
 
-**WATCH** *(press Execute. Silence. Let it run — roughly 20 seconds.)*
+All green? Continue. Then arrange windows:
 
-*(Tasks appear. Bookings land. The Autonomy Ledger climbs. The phone stays on
-the desk until the payoff — events sync within seconds, so it will be ready.)*
+| Where | What |
+|---|---|
+| Screen/half you record | Browser window at the app, `/capture`, zoom 125% (Cmd +) |
+| Screen/half you do NOT record | Second browser window at `/director` |
+| Desk, in reach | Phone (calendar app open) + the printed paper |
 
-**PAY OFF**
+On the `/director` page press **1 · reset**, then **2 · seed**, wait for each
+"done". Turn on **Do Not Disturb** on Mac and phone. Close Slack/mail.
 
-> Three appointments booked into a real FHIR store. And look at the phone —
-
-*(pick it up, pull to refresh the calendar, turn the screen to camera)*
-
-> — the same bookings, in my actual Google Calendar. Not a screenshot, not a
-> mock: the fleet owns a calendar, it is shared to my account, and the events
-> are written through the Calendar API with the same idempotency keys as the
-> clinical record. When the Failure Drill kills the Scheduler in a minute,
-> watch this phone: one event. Never two.
->
-> Prescriptions routed. Monitoring armed.
->
-> Nobody typed anything. There is no chat window in this product. That is
-> deliberate — a chatbot that gives you advice hands the work back to you. This
-> does the work.
+Do one silent practice run clicking through the director cues without
+recording — 5 minutes, and the real take will feel easy.
 
 ---
 
-## 1:30 — The Refusal
+## 3 · The take
 
-**SET UP**
+1. Start the QuickTime recording.
+2. On `/director`, press **Start**.
+3. Do exactly what each cue says. **Right arrow** for the next cue.
+   - `SAY` (white serif text) — read it out loud, word for word. Two cues ask
+     you to read a number or a question **off the stage screen** — say whatever
+     is actually there.
+   - `DO` (amber text) — one action: a click on the stage window, or picking up
+     the phone.
+   - `SILENCE` (green text) — say nothing and let the screen work. This will
+     feel too long. It is not. The silence is the proof.
+4. The last cue says stop recording. Stop it.
 
-> And then it stops.
->
-> One instruction on this sheet is genuinely ambiguous — you can read it two
-> ways, and the two readings imply different drugs. Watch what it does with it.
-
-**WATCH** *(the Reconciler flips to refused. Silence.)*
-
-**PAY OFF**
-
-> It refused.
->
-> It did not guess, it did not average the two readings, it did not pick the
-> likelier one. It assembled both interpretations, stated why it could not
-> choose, and put a licensed human in front of the decision.
->
-> That is the counter on the right — **refused: 1**. I put that number on screen
-> next to the autonomous count on purpose.
->
-> Everyone in this competition is optimising for how much their agents do alone.
-> In medicine that is the wrong axis. The thing worth building is a system that
-> knows precisely where its authority ends. The fleet executes the mechanical.
-> Only a clinician decides the clinical.
-
-**SET UP** *(the refusal spreading — do not rush this, it is the best thirty
-seconds in the demo and none of it is scripted)*
-
-> A refusal is only worth something if the rest of the fleet respects it. Watch
-> what the other agents do with an open question.
-
-**WATCH** *(the dose schedule and today's check-in.)*
-
-**PAY OFF**
-
-> The Pharmacist built the daily schedule — four drugs, real times. And
-> amlodipine is held. Not dropped, held: it says a clinician has been asked to
-> decide whether this drug applies.
->
-> It reads active medications from the record, and amlodipine is still active,
-> because nobody has decided. It would have been trivial for it to put that pill
-> on the fridge at eight in the morning — which would be a clinical decision,
-> made silently, by the agent least qualified to make it.
->
-> And then the Coach. It gets one question a day. Here is what it chose:
-
-*(read the question off the screen)*
-
-> "What was your most recent blood pressure reading?"
->
-> Its stated reason: that reading is the objective data the clinician needs to
-> decide whether to resume or discontinue amlodipine.
->
-> Nobody wired that. Three agents independently converged on the one open
-> decision in this patient's care — one refused it, one honoured the refusal,
-> and one went looking for the fact that would resolve it.
+**If something breaks mid-take: do not stop.** Say "and this is live, so let's
+watch it recover" — the system genuinely recovers, and a survived hiccup is
+worth more than a clean run. Only restart the take if the internet itself dies.
 
 ---
 
-## 2:00 — The Failure Drill *(hand over the knife)*
+## 4 · After the take
 
-**SET UP**
+1. Watch it once. Checklist: opening silence held · the parse landed · phone
+   shown twice · the DOWN→SKIP sequence visible · ended on silence.
+2. Upload to **YouTube** → visibility **Unlisted** (NOT private).
+3. Copy the YouTube link → Devpost → **Project details** → paste into **Video
+   demo link** → **Save & continue**.
+4. Devpost → **Submit** step → submit. (You can still edit until the deadline.)
 
-> Everything so far assumed the happy path. Let me break it.
->
-> This panel kills a worker process — a real `os._exit`, no cleanup, no graceful
-> shutdown, no chance to finish what it was doing. Pick an agent. Any of them.
->
-> *(If a judge is live: let them choose and click. If not: "I'll take the
-> Scheduler, mid-booking — the worst possible moment, because a retry there is
-> how you double-book a patient.")*
-
-**WATCH** *(arm, dispatch, stop talking — about 30 seconds)*
-
-*(The worker dies mid-step. The audit stream shows a red gap where the
-heartbeat stopped. Then: redelivery. A different worker ID. Completed steps
-marked SKIPPED. Only the remaining work runs. Task completes.)*
-
-**PAY OFF**
-
-> The process is gone. Nothing caught that — it was not an exception handler,
-> there was no try/finally, the container did not shut down cleanly.
->
-> What recovered it was infrastructure. The Pub/Sub message was never acked, so
-> Pub/Sub redelivered it. Cloud Run had a fresh container. Look at the worker
-> ID — different process.
->
-> And then the important part: the steps it had already finished are marked
-> skipped, not repeated. Every side effect carries a deterministic idempotency
-> key, and the key is written into the external system too — so even a crash in
-> the gap between "appointment booked" and "we wrote down that we booked it"
-> cannot double-book.
->
-> At-least-once delivery plus idempotent steps gives you effectively-once
-> execution. There is no exactly-once, and I am not going to claim there is.
->
-> One appointment. Not two.
->
-> The red gap stays in the audit trail permanently. I do not clean it up. In a
-> regulated domain the scar is the evidence.
-
----
-
-## 2:45 — The live event, and the restraint
-
-**SET UP**
-
-> Monitoring has been armed since minute one — and armed against the red flags
-> printed on *this* document, not a generic alarm. A different discharge summary
-> produces a different monitor from the same agent.
->
-> Here is a message from his daughter.
-
-**WATCH** *(`./scripts/monitor.sh chest_pain`. Silence — about 25 seconds.)*
-
-*(Watchman records the report to FHIR, matches two flags, hands off to the
-Escalator. The Escalator pages, an SLA clock starts, the console lights up.)*
-
-**PAY OFF**
-
-> Paged. Note what it did not do — it did not treat, it did not advise, it did
-> not reassure her. It put a clinician on it and started a five-minute clock.
->
-> And that task is now the only kind in the system that no agent can close.
-> Escalations are human-terminated. The fleet can open that door; only a person
-> walks back through it.
-
-**SET UP** *(the counter-beat — this is what separates the demo from every other
-submission, so do not rush it)*
-
-> Now the harder one. Same patient, two days later — and pay attention to what
-> she is describing, because it is not a coincidence.
-
-**WATCH** *(`./scripts/monitor.sh lightheaded_on_standing`. Silence.)*
-
-*(Watchman finds nothing on the red-flag list but marks it worth attention, so
-it still routes to the Escalator — which declines to page, and records why.)*
-
-**PAY OFF**
-
-> It decided a human was not needed. Nobody was woken up.
->
-> Read what it wrote down: the reason, the strongest argument against its own
-> decision, and the specific thing that would have changed its answer. A
-> decision not to act is as auditable here as a decision to act — otherwise
-> nobody can review it afterwards, and "the system didn't flag it" becomes
-> unfalsifiable.
->
-> Anything can be built to panic. Restraint is the expensive part. A monitor
-> that escalates everything is ignored inside a week, and an ignored monitor is
-> worse than none — it replaces a gap in coverage with the belief that somebody
-> is watching.
-
-*(Then the connection. Say it slowly — this is the line that makes the whole
-demo one thing instead of five features.)*
-
-> And look at what it is. Lightheaded on standing. Three days after the
-> Reconciler refused to decide whether he should still be on a second blood
-> pressure medication.
->
-> That is the unresolved question showing up in his body. Which is the honest
-> argument for why refusing has to come with a clock on it — a decision handed
-> to a human is not finished, it is pending, and the patient is living inside
-> the gap while it waits.
-
-*(If a judge asks whether a model could be talked into staying quiet:)*
-
-> No. The model advises, the code decides, and the code can only overrule it in
-> one direction. If it recommends standing down on a symptom that is printed on
-> the patient's own return-to-emergency list, it gets escalated anyway and the
-> disagreement is written to the audit trail. There is no path in that file
-> where a model's reassurance suppresses a documented red flag.
-
----
-
-## 3:20 — Scale, and generality
-
-**SET UP**
-
-> One patient is a demo.
-
-**WATCH** *(open `/console/fleets`. Silence.)*
-
-**PAY OFF**
-
-> Two hundred fleets, one clinician. Grey is idle, green is working, amber is
-> waiting on a person — and the queue underneath is sorted by who is waiting,
-> never by who arrived.
-
-**SET UP** *(pre-empt the obvious suspicion, before anyone has to ask)*
-
-> Now, two hundred coloured squares is the easiest thing in the world to fake.
-> So let me hand all two hundred of them real work.
-
-**WATCH** *(`hand work to all 200`. Silence — let the grid turn over.)*
-
-**PAY OFF**
-
-> Every one of those is a real FHIR Patient in the Healthcare API, a real
-> Firestore fleet, a real Pub/Sub message, and a real appointment written to a
-> managed clinical store. The colour is computed from that fleet's own counters
-> — click any square and the fleet behind it is there.
->
-> That is affordable because the Scheduler makes no model call at all. It
-> resolves a provider and writes to FHIR. Two hundred of those costs a couple of
-> hundred database writes, not tokens.
->
-> And watch it drain rather than spike — this service is capped at four
-> instances, so the work queues. I could raise the cap; I would rather you see
-> the real behaviour of the thing I actually deployed.
->
-> The patients are synthetic. The infrastructure is not.
-
-**SET UP**
-
-> And nothing in here is cardiac.
-
-**WATCH** *(photograph a pediatric vaccine schedule — 15 seconds)*
-
-**PAY OFF**
-
-> Same fleet. Same seven agents. Different document. Wherever a human being is
-> handed a piece of paper and expected to execute it correctly for six weeks,
-> this works.
-
----
-
-## 3:45 — Back to the paper
-
-*(Pick up the discharge summary. Hold it up. Same framing as 0:00.)*
-
-> The hospital saves your life.
->
-> Then it hands you a piece of paper.
->
-> We take it from there.
-
-*(Stop talking. Let it sit. End the recording on silence, not on a thank-you.)*
-
----
-
-## Delivery notes
-
-**Pace.** Slower than feels right. Nerves push you 20% faster than your
-rehearsal, and the demo does not need you to hurry — the software is the thing
-that is fast.
-
-**Volume.** Drop, do not raise, on the two emotional lines (0:00 payoff, 3:45).
-Quiet reads as certainty. Loud reads as a pitch.
-
-**Do not apologise.** Not for the sandbox, not for synthetic data, not for the
-one simulated endpoint. Declare it once, plainly, with the badge on screen, and
-move on. Judges forgive declared simulation and never forgive discovered
-simulation.
-
-**If something breaks.** Do not restart and do not edit. Say what broke, say
-what the system did about it, and continue. A fleet that survives an unplanned
-failure on camera is worth more than a clean run — but only if you stay calm,
-so decide now that this is fine.
-
-**The two sentences to land above all others**, in priority order:
-
-1. *"It refused."*
-2. *"One appointment. Not two."*
-
-If everything else gets rushed, those two land clean.
+That's everything.
