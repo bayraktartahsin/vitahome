@@ -35,6 +35,7 @@ from ..agents import watchman as watchman_agent
 from ..compliance import redact
 from ..config import settings
 from ..fleet import chaos, dispatch, ledger, registry, runtime, supervisor
+from ..integrations import calendar as gcal
 from ..integrations import fhir, gemini
 from ..sim import cohort, hero_patient, vitals
 
@@ -81,6 +82,7 @@ def health():
 def health_deep():
     """Proves the whole substrate is live — used in the demo to show real infra."""
     return {"ok": True, "fhir": fhir.ping(), "gemini": gemini.ping(),
+            "calendar": gcal.ping(),
             "project": settings.gcp_project, "fhirStore": settings.hc_fhir_store}
 
 
@@ -480,6 +482,13 @@ def demo_reset(request: Request, patientId: str = "p_hero"):
     pdoc.set({"openConflicts": [], "fleetState": "idle"}, merge=True)
     chaos.disarm()
     return {"reset": patientId, "removed": removed, "ledger": ledger.read_ledger(patientId)}
+
+
+@app.get("/demo/calendar")
+def demo_calendar():
+    """The fleet's calendar: id, share status, and the link a person opens to
+    add it to their own Google Calendar. This is how the demo phone gets it."""
+    return gcal.ping()
 
 
 @app.get("/demo/scenarios")

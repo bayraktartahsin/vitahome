@@ -30,7 +30,11 @@ nothing at all to the person watching.
 
 - [ ] `./scripts/preflight.sh` green — every service, FHIR store, and subscription live
 - [ ] Hero patient seeded, ledger reset to zero
-- [ ] Phone in frame, unlocked, notifications on, volume up, Do Not Disturb **off**
+- [ ] Phone in frame, unlocked, **Google Calendar app installed and signed in to
+  the account the fleet's calendar is shared with** (open
+  `/demo/calendar` on the gateway, open the `link` it returns on the phone once,
+  add the calendar — one-time setup). Rehearse: book once, pull to refresh,
+  watch the event appear.
 - [ ] Browser: two windows side by side — family view left, clinician console right
 - [ ] Zoom to 125%. Judges watch on laptops.
 - [ ] The paper discharge summary physically in your hand
@@ -121,14 +125,22 @@ one-second figure was a shorter test prompt and it is not what this does.)*
 
 **WATCH** *(press Execute. Silence. Let it run — roughly 20 seconds.)*
 
-*(Tasks appear. Bookings land. The phone buzzes on camera with a real calendar
-invite. The Autonomy Ledger climbs.)*
+*(Tasks appear. Bookings land. The Autonomy Ledger climbs. The phone stays on
+the desk until the payoff — events sync within seconds, so it will be ready.)*
 
 **PAY OFF**
 
-> Three appointments booked into a real FHIR store. A real calendar invite —
-> that is my actual phone, that buzz was not a sound effect. Prescriptions
-> routed. Monitoring armed.
+> Three appointments booked into a real FHIR store. And look at the phone —
+
+*(pick it up, pull to refresh the calendar, turn the screen to camera)*
+
+> — the same bookings, in my actual Google Calendar. Not a screenshot, not a
+> mock: the fleet owns a calendar, it is shared to my account, and the events
+> are written through the Calendar API with the same idempotency keys as the
+> clinical record. When the Failure Drill kills the Scheduler in a minute,
+> watch this phone: one event. Never two.
+>
+> Prescriptions routed. Monitoring armed.
 >
 > Nobody typed anything. There is no chat window in this product. That is
 > deliberate — a chatbot that gives you advice hands the work back to you. This

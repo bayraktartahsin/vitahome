@@ -32,6 +32,7 @@ gcloud services enable \
   secretmanager.googleapis.com \
   aiplatform.googleapis.com \
   texttospeech.googleapis.com \
+  calendar-json.googleapis.com \
   iam.googleapis.com \
   --project "$PROJECT"
 
@@ -63,6 +64,11 @@ gcloud secrets add-iam-policy-binding gemini-api-key \
   --project "$PROJECT" >/dev/null
 gcloud projects add-iam-policy-binding "$PROJECT" \
   --member="serviceAccount:${SA}" --role=roles/healthcare.fhirResourceEditor >/dev/null
+# The Calendar scope is not carried by the default Cloud Run token (Calendar is
+# not a Cloud API), so the SA mints itself a calendar-scoped token through the
+# IAM Credentials API — which needs exactly one grant: tokenCreator on itself.
+gcloud iam service-accounts add-iam-policy-binding "$SA" --project "$PROJECT" \
+  --member="serviceAccount:${SA}" --role=roles/iam.serviceAccountTokenCreator --quiet >/dev/null
 
 # --cpu-boost is doing real work here. Without it a cold start runs ~8s and you
 # end up pinning min-instances=1 to hide it, which bills ~$23/month to serve

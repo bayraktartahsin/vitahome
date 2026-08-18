@@ -18,7 +18,7 @@ Built for the **All Things Agentic Hackathon** · track: **The Fortified Enterpr
 |---|---|---|---|
 | Pa | **Parser** | reads | Document → structured plan; re-ranks every instruction by how dangerous it is to miss |
 | Rc | **Reconciler** | checks | New meds vs. the FHIR record; finds contradictions and refuses to resolve them |
-| Sc | **Scheduler** | books | Every follow-up appointment, autonomously, into a real FHIR store |
+| Sc | **Scheduler** | books | Every follow-up into a real FHIR store — and onto a real phone via Google Calendar |
 | Ph | **Pharmacist** | sends | Turns "twice daily for 12 months" into an actual clock; never invents a time |
 | Wa | **Watchman** | watches | The red flags named in *this* document — nothing generic |
 | Co | **Coach** | checks in | One question a day, chosen from what the fleet does not know |
@@ -146,9 +146,9 @@ cd web && npm install && npm run dev
 
 ## Google stack
 
-**In use today:** Gemini 3.5 Flash-Lite (extraction) · Gemini 3.7 Flash (judgement) · Agent Development Kit · A2A agent cards · **Cloud Healthcare API (FHIR R4)** · Cloud Run · Firestore · Pub/Sub · Cloud Scheduler · Secret Manager · Cloud Build.
+**In use today:** Gemini 3.5 Flash-Lite (extraction) · Gemini 3.7 Flash (judgement) · Gemini TTS (the Coach speaks) · Gemma (the log auditor) · Agent Development Kit · A2A agent cards · **Cloud Healthcare API (FHIR R4)** · **Google Calendar API** (bookings land on a real phone) · Cloud Run · Firestore · Pub/Sub · Cloud Scheduler · Secret Manager · Cloud Build.
 
-**Planned, not yet shipped:** Gemini TTS (the Coach asks in text today, not voice), Gemma 4 (PHI redaction before logs), Veo 3.1 (personalised instruction clips), Cloud Tasks, Cloud Trace. They are named here because they are on the roadmap, not because they are running.
+**Planned, not yet shipped:** Veo 3.1 (personalised instruction clips), Cloud Tasks, Cloud Trace.
 
 Model tiers were chosen from measurements on this project's own prompts, not from a datasheet — Flash-Lite for structured extraction on the hot path, Flash for the two places the model is asked to exercise judgement (ambiguity, escalate-or-not), where the extra ~1.3s buys something.
 
@@ -162,7 +162,7 @@ PHI lives only in FHIR and Firestore. Pub/Sub messages carry references, and eac
 
 ### What is simulated, stated plainly
 
-- **the provider directory** the Scheduler picks from (labelled "provider directory (demo)" in every response)
+- **the provider directory** the Scheduler picks from (labelled "provider directory (demo)" in every response). The booking itself is real twice over — a FHIR Appointment in the Healthcare API and an event in a real Google Calendar shared to a real phone.
 - **the home-monitoring feed** — there is no wearable; the reports in `app/sim/vitals.py` are written as a family member would actually send them, and every response is tagged `simulated home monitor`
 
 Everything else touches a real Google Cloud service. FHIR Patients, Appointments, MedicationRequests and Observations are genuine writes to a managed Healthcare API store.

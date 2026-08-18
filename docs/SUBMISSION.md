@@ -66,7 +66,7 @@ read three times without finding the line that matters.
 |---|---|---|
 | Pa | Parser | Document → structured plan, re-ranked by consequence, with a plain-language sentence under anything fatal |
 | Rc | Reconciler | Compares the discharge list against the FHIR record; finds contradictions and refuses to resolve them |
-| Sc | Scheduler | Books every follow-up into the Cloud Healthcare API |
+| Sc | Scheduler | Books every follow-up into the Cloud Healthcare API — and onto a real phone, via a Google Calendar the fleet owns |
 | Ph | Pharmacist | Turns "twice daily for 12 months" into a real clock; refuses anything it would have to guess at |
 | Wa | Watchman | Monitors against the red flags on *this* document, not a generic alarm |
 | Co | Coach | One question a day, chosen from what is genuinely unknown — and sends nothing when there is nothing to learn |
@@ -83,7 +83,8 @@ cleanup, no graceful shutdown, message left unacked. Nothing catches it.
 
 Recovery is infrastructure, not choreography. Pub/Sub redelivers, Cloud Run
 supplies a fresh container — the worker ID in the audit trail visibly changes —
-and the ledger skips every step that already completed. One appointment. Not two.
+and the ledger skips every step that already completed. One FHIR appointment and
+one calendar event on a real phone. Never two of either.
 
 Every step carries a deterministic idempotency key, and that key is written
 *into* the external system as the FHIR resource identifier with
@@ -252,7 +253,8 @@ and frightened.
 ## What is simulated, stated plainly
 
 - the **provider directory** the Scheduler books against (labelled "provider
-  directory (demo)" in every response)
+  directory (demo)" in every response) — the booking itself is real twice over:
+  a FHIR Appointment and a Google Calendar event on a real phone
 - the **home-monitoring feed** — there is no wearable; the reports are written
   as a family member would actually send them and every response is tagged
   `simulated home monitor`

@@ -199,6 +199,13 @@ print(f\"{t['status']}|{t.get('attempt')}|{len(refs)}|{len(set(refs))}\")")
     bad "run $run — status=$st attempt=$att refs=$n unique=$uniq"
   fi
 done
+CAL=$(curl -s "$G/patient/$PID/tasks" | jq_ "
+t=[x for x in d['tasks'] if x.get('taskId')=='$T'][0]
+c=[s for s in t.get('steps',[]) if s['name']=='calendar_event']
+r=(c[0].get('result') or {}) if c else {}
+print('real' if r.get('htmlLink') else ('sim' if r.get('simulated') else 'missing'))")
+eq "the booking also landed in a real Google Calendar" "$CAL" "real"
+
 A=$(curl -s "$G/patient/$PID/audit?limit=200")
 echo "$A" | grep -q "AGENT_DOWN" && ok "the kill is in the audit trail" || bad "no AGENT_DOWN recorded"
 echo "$A" | grep -q "skipped on replay" && ok "completed steps were skipped, not repeated" || bad "no skip recorded"

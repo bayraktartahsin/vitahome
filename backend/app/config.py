@@ -58,6 +58,13 @@ class Settings(BaseSettings):
     # the decoupling claim — an agent's location is configuration, not code.
     agent_services: str = ""
 
+    # --- Google Calendar (the real action surface) ---
+    calendar_enabled: bool = True
+    calendar_summary: str = "VitaHome — appointments (demo)"
+    # Who the fleet's calendar is shared with — the account whose phone the
+    # events appear on. Change per deployment, not per booking.
+    calendar_share_with: str = "info@gravitilabs.com"
+
     # Optional gate for destructive demo endpoints (reset/cohort/storm/chaos).
     # Empty = open, which is the deliberate posture while judges need to drive
     # the chaos panel themselves; set it and callers must send X-Demo-Key.

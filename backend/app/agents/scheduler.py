@@ -17,6 +17,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from ..config import settings
 from ..fleet import ledger
 from ..fleet.runtime import Refusal
 from ..integrations import fhir
@@ -104,6 +105,35 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
     appt = ledger.run_step(pid, task_id, "scheduler", "fhir_appointment", _appointment)
     ledger.bump_ledger(pid, "systemsTouched")
 
+    # ---- step 2b: the same booking, on a real phone -----------------------
+    # A second, independent external system — a Google Calendar the fleet owns,
+    # shared to the family's account. Failure here must never fail the booking:
+    # the clinical record is the source of truth, the calendar is how humans
+    # see it. So unavailability is caught, declared, and moved past — the one
+    # place in this agent where an exception is absorbed, and it says so.
+    def _calendar(key: str) -> dict[str, Any]:
+        if not settings.calendar_enabled:
+            return {"simulated": True, "note": "calendar disabled by configuration"}
+        try:
+            from ..integrations import calendar
+            ev = calendar.create_event(
+                summary=f"{provider['specialty'].title()} — {provider['practitioner']}",
+                description=(f"Follow-up booked autonomously by VitaHome from "
+                             f"discharge instruction {instruction_id or '—'}.\n"
+                             f"Clinical record: {appt.get('externalRef')}"),
+                start_iso=start.isoformat().replace("+00:00", "Z"),
+                end_iso=end.isoformat().replace("+00:00", "Z"),
+                idem=key,
+            )
+            return {**ev, "externalRef": f"gcal:{ev['eventId']}"}
+        except calendar.CalendarUnavailable as e:
+            return {"simulated": True,
+                    "note": f"calendar unavailable — declared simulation ({e})"}
+
+    cal = ledger.run_step(pid, task_id, "scheduler", "calendar_event", _calendar)
+    if not cal.get("simulated"):
+        ledger.bump_ledger(pid, "systemsTouched")
+
     # ---- step 3: reflect it on the care plan ------------------------------
     def _confirm(_key: str) -> dict[str, Any]:
         if instruction_id:
@@ -120,4 +150,5 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
     ledger.run_step(pid, task_id, "scheduler", "confirm", _confirm)
 
     when = start.strftime("%a %d %b, %H:%M")
-    return f"booked {provider['specialty']} — {provider['practitioner']}, {when}"
+    where = "FHIR + phone calendar" if not cal.get("simulated") else "FHIR"
+    return f"booked {provider['specialty']} — {provider['practitioner']}, {when} ({where})"

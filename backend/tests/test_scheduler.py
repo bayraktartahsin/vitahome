@@ -4,6 +4,7 @@ from __future__ import annotations
 import pytest
 
 from app.agents import scheduler
+from app.integrations import calendar
 from app.fleet.runtime import Refusal
 
 
@@ -85,7 +86,7 @@ def test_books_known_specialty_through_three_steps(monkeypatch):
 
     summary = scheduler.body("p_hero", "t_1", _task())
 
-    assert fake.calls == ["resolve_provider", "fhir_appointment", "confirm"]
+    assert fake.calls == ["resolve_provider", "fhir_appointment", "calendar_event", "confirm"]
     assert "cardiology" in summary
     assert "systemsTouched" in fake.bumps, "a real external system was touched"
 
