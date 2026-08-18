@@ -77,6 +77,10 @@ def agent_card(name: str) -> dict[str, Any]:
         "iamScope": scope,
         "instructionHash": hashlib.sha256(instruction.encode()).hexdigest()[:16],
         "endpoint": f"/agents/{name}",
+        # The physical service this agent runs on. "gateway" unless it has been
+        # extracted — which is a push-endpoint change, and this field is how a
+        # reviewer verifies that claim rather than taking it on faith.
+        "service": settings.agent_service_map.get(name, "gateway"),
         "transport": "pubsub-push",
         "humanTerminated": name == "escalator",
     }

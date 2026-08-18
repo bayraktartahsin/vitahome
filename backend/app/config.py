@@ -53,6 +53,24 @@ class Settings(BaseSettings):
     # than no timer.
     sla_minutes: dict[str, int] = {"emergency": 5, "urgent": 30, "routine": 480}
 
+    # Where each agent physically runs, as JSON: {"scheduler": "https://..."}.
+    # Empty means the gateway hosts it. This exists so the registry can PROVE
+    # the decoupling claim — an agent's location is configuration, not code.
+    agent_services: str = ""
+
+    # Optional gate for destructive demo endpoints (reset/cohort/storm/chaos).
+    # Empty = open, which is the deliberate posture while judges need to drive
+    # the chaos panel themselves; set it and callers must send X-Demo-Key.
+    demo_key: str = ""
+
+    @property
+    def agent_service_map(self) -> dict[str, str]:
+        import json
+        try:
+            return json.loads(self.agent_services) if self.agent_services else {}
+        except json.JSONDecodeError:
+            return {}
+
     # --- Runtime ---
     port: int = 8080
     log_level: str = "INFO"

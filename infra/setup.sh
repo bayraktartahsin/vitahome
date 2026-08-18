@@ -78,6 +78,23 @@ gcloud run deploy vitahome-gateway --source ./backend \
 GATEWAY_URL="$(gcloud run services describe vitahome-gateway --region "$REGION" \
   --project "$PROJECT" --format='value(status.url)')"
 
+echo "▸ deploying the Scheduler on its own service"
+# Deliberately the same source and image as the gateway. Extracting an agent is
+# a ROUTING change — its push subscription targets this service instead — and
+# deploying it this way is what keeps that claim honest. The drill kills a
+# worker here while the gateway keeps serving the console.
+gcloud run deploy vitahome-scheduler --source ./backend \
+  --project "$PROJECT" --region "$REGION" --platform managed --allow-unauthenticated \
+  --port 8080 --memory 1Gi --cpu 1 --timeout 300 --concurrency 40 \
+  --min-instances 0 --max-instances 20 --cpu-boost \
+  --set-env-vars "GCP_PROJECT=${PROJECT},REGION=${REGION},HC_LOCATION=${HC_LOCATION},HC_DATASET=${DATASET},HC_FHIR_STORE=${FHIR_STORE},MODEL_FAST=gemini-3.5-flash-lite,MODEL_REASON=gemini-3.7-flash,LOG_LEVEL=INFO" \
+  --set-secrets "GEMINI_API_KEY=gemini-api-key:latest" --quiet
+
+SCHED_URL="$(gcloud run services describe vitahome-scheduler --region "$REGION" \
+  --project "$PROJECT" --format='value(status.url)')"
+gcloud run services update vitahome-gateway --project "$PROJECT" --region "$REGION" \
+  --update-env-vars "^@^AGENT_SERVICES={\"scheduler\":\"${SCHED_URL}\"}" --quiet >/dev/null
+
 echo "▸ deploying web"
 gcloud run deploy vitahome-web --source ./web \
   --project "$PROJECT" --region "$REGION" --platform managed --allow-unauthenticated \
@@ -97,15 +114,17 @@ echo "▸ Pub/Sub push subscriptions → agent endpoints"
 # and Pub/Sub redelivers a task that is still running — survivable, because the
 # ledger skips completed steps, but it muddies the attempt counter.
 for a in reconciler scheduler pharmacist watchman coach escalator; do
+  EP="${GATEWAY_URL}"
+  [ "$a" = "scheduler" ] && EP="${SCHED_URL}"
   if gcloud pubsub subscriptions create "sub-$a" \
-      --topic=fleet-work --push-endpoint="${GATEWAY_URL}/agents/${a}" \
+      --topic=fleet-work --push-endpoint="${EP}/agents/${a}" \
       --message-filter="attributes.agent = \"${a}\"" \
       --ack-deadline=90 --project "$PROJECT" 2>/dev/null; then
     echo "  sub-$a created"
   else
     # Filters are immutable; endpoint and deadline are not. Converge what we can.
     gcloud pubsub subscriptions update "sub-$a" \
-      --push-endpoint="${GATEWAY_URL}/agents/${a}" \
+      --push-endpoint="${EP}/agents/${a}" \
       --ack-deadline=90 --project "$PROJECT" --quiet >/dev/null
     echo "  sub-$a updated"
   fi

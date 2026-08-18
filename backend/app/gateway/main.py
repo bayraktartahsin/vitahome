@@ -55,6 +55,19 @@ AGENT_NAMES = ["parser", "reconciler", "scheduler", "pharmacist",
                "watchman", "coach", "escalator"]
 
 
+def _guard_demo(request: Request) -> None:
+    """Optional gate on destructive endpoints (reset, cohort, storm, chaos).
+
+    Open by default, on purpose: judges are invited to drive the chaos panel
+    themselves, and a key would end that. The moment judging is over, set
+    DEMO_KEY and every destructive call requires the X-Demo-Key header — the
+    posture changes with one env var, not a deploy. The read paths and the
+    normal patient flows never require it.
+    """
+    if settings.demo_key and request.headers.get("x-demo-key") != settings.demo_key:
+        raise HTTPException(401, "X-Demo-Key required — this deployment is locked")
+
+
 # ---------------------------------------------------------------- health ----
 
 @app.get("/health")
@@ -438,7 +451,8 @@ def demo_dispatch(req: DispatchRequest):
 
 
 @app.post("/demo/reset")
-def demo_reset(patientId: str = "p_hero"):
+def demo_reset(request: Request, patientId: str = "p_hero"):
+    _guard_demo(request)
     """Clear this patient's tasks, audit trail and counters.
 
     For rehearsals. The demo shows an Autonomy Ledger and an audit stream, and
@@ -519,8 +533,9 @@ def demo_book_followups(patientId: str = "p_hero"):
 # ------------------------------------------------------------ the drill ----
 
 @app.post("/chaos/arm")
-def chaos_arm(agent: str = "scheduler", patientId: str | None = None,
+def chaos_arm(request: Request, agent: str = "scheduler", patientId: str | None = None,
               step: str | None = "fhir_appointment"):
+    _guard_demo(request)
     """Arm an agent to die inside a named step.
 
     Deterministic and still a genuine ungraceful exit — the worker kills itself
@@ -548,7 +563,8 @@ def chaos_status():
 
 
 @app.post("/chaos/kill")
-def chaos_kill(agent: str = "scheduler", patientId: str | None = None):
+def chaos_kill(request: Request, agent: str = "scheduler", patientId: str | None = None):
+    _guard_demo(request)
     """Kill immediately, whichever instance serves this request."""
     if agent not in AGENT_NAMES:
         raise HTTPException(404, "unknown agent")
@@ -625,7 +641,8 @@ def _compute_fleets(limit: int):
 
 
 @app.post("/demo/cohort")
-def demo_cohort(count: int = 200):
+def demo_cohort(request: Request, count: int = 200):
+    _guard_demo(request)
     """Seed a synthetic cohort. Real FHIR patients, real fleets, idempotent."""
     if not 1 <= count <= 500:
         raise HTTPException(400, "count must be between 1 and 500")
@@ -633,7 +650,8 @@ def demo_cohort(count: int = 200):
 
 
 @app.post("/demo/storm")
-def demo_storm(count: int = 50, specialty: str = "cardiology"):
+def demo_storm(request: Request, count: int = 50, specialty: str = "cardiology"):
+    _guard_demo(request)
     """Hand real work to ``count`` cohort fleets at once.
 
     Deliberately the Scheduler: it makes no model call, so a burst costs FHIR

@@ -108,7 +108,11 @@ for line in sys.stdin:
     probs=[]
     if not dl.isdigit() or int(dl)<60: probs.append(f'ack={dl}s too low')
     if not flt.strip():                probs.append('no attribute filter')
-    if not ep.startswith(g):           probs.append(f'endpoint {ep or \"missing\"}')
+    # sub-<agent> must push to /agents/<agent> on a vitahome service. The
+    # scheduler deliberately lives on its own service — that split is the
+    # decoupling demonstration, not a misconfiguration.
+    if not (ep.startswith('https://vitahome-') and ep.endswith(f'/agents/{name[4:]}')):
+        probs.append(f'endpoint {ep or \"missing\"}')
     if probs: print(f'  \033[31m✗\033[0m {name:<16} ' + ' · '.join(probs))
     else:     print(f'  \033[32m✓\033[0m {name:<16} ack={dl}s filtered')
 "

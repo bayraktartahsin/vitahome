@@ -16,13 +16,13 @@ Built for the **All Things Agentic Hackathon** · track: **The Fortified Enterpr
 
 | | Agent | Verb | Duty |
 |---|---|---|---|
-| 📄 | **Parser** | reads | Document → structured plan; re-ranks every instruction by how dangerous it is to miss |
-| 💊 | **Reconciler** | checks | New meds vs. the FHIR record; finds contradictions and refuses to resolve them |
-| 📅 | **Scheduler** | books | Every follow-up appointment, autonomously, into a real FHIR store |
-| 🏥 | **Pharmacist** | sends | Turns "twice daily for 12 months" into an actual clock; never invents a time |
-| 👁 | **Watchman** | watches | The red flags named in *this* document — nothing generic |
-| 🗣 | **Coach** | checks in | One question a day, chosen from what the fleet does not know |
-| 🚨 | **Escalator** | calls a human | The only path to a clinical decision — and the only agent that may decline |
+| Pa | **Parser** | reads | Document → structured plan; re-ranks every instruction by how dangerous it is to miss |
+| Rc | **Reconciler** | checks | New meds vs. the FHIR record; finds contradictions and refuses to resolve them |
+| Sc | **Scheduler** | books | Every follow-up appointment, autonomously, into a real FHIR store |
+| Ph | **Pharmacist** | sends | Turns "twice daily for 12 months" into an actual clock; never invents a time |
+| Wa | **Watchman** | watches | The red flags named in *this* document — nothing generic |
+| Co | **Coach** | checks in | One question a day, chosen from what the fleet does not know |
+| Es | **Escalator** | calls a human | The only path to a clinical decision — and the only agent that may decline |
 
 All seven are live and published as A2A agent cards at [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry).
 
@@ -57,6 +57,30 @@ Agents communicate through **Pub/Sub messages and Firestore task documents — n
 | Gateway | https://vitahome-gateway-205100594497.us-central1.run.app |
 | Fleet registry (A2A cards) | [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry) |
 | Substrate health | [`/health/deep`](https://vitahome-gateway-205100594497.us-central1.run.app/health/deep) |
+
+## Track requirements, mapped to artifacts
+
+Every Fortified Enterprise Fleet requirement, with the URL that proves it —
+verify rather than trust:
+
+| Requirement | Where it is, live |
+|---|---|
+| **Agent registry** | [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry) — seven A2A cards, each naming its model, IAM scope, instruction hash, and **which Cloud Run service it runs on** |
+| **Async runtime** | One Pub/Sub topic, one filtered push subscription per agent, supervised lifecycle with lease + heartbeat. The Scheduler runs on [its own Cloud Run service](https://vitahome-scheduler-205100594497.us-central1.run.app/health) — extracted with a push-endpoint change and zero code changes, which is the decoupling claim made checkable |
+| **Persistent memory** | Firestore task ledger (idempotent step records that survive worker death — the [drill](https://vitahome-web-205100594497.us-central1.run.app/console/drill) is the proof), care plans, append-only audit trail, and the Cloud Healthcare API FHIR store as clinical source of truth |
+| **Security & governance** | Model-advises/code-decides boundaries in every agent; the Escalator's one-way override; human-terminated escalations with SLA clocks; per-agent IAM scopes on the registry cards; `DEMO_KEY` lock for destructive endpoints (below) |
+| **Compliance-aware data handling** | PHI never rides the queue (messages carry references; agents fetch in their own IAM scope); a deterministic redaction filter on every log record; and [Gemma auditing the logs](https://vitahome-gateway-205100594497.us-central1.run.app/compliance/redactions) to make the "no PHI in logs" claim falsifiable |
+
+### Security posture, stated plainly
+
+The demo endpoints (`/demo/*`, `/chaos/*`) are **open on purpose**: judges are
+invited to kill agents and reseed patients themselves, and an auth wall would
+end that. That is a deliberate, reversible choice, not an oversight — set the
+`DEMO_KEY` env var and every destructive endpoint requires an `X-Demo-Key`
+header, with no redeploy. Read paths and patient flows are unaffected either
+way. What a production deployment would change is documented honestly: IAP in
+front of the console, per-agent service accounts instead of the shared default,
+and VPC-SC around the Healthcare API.
 
 ## Break it yourself
 

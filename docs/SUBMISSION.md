@@ -64,13 +64,13 @@ read three times without finding the line that matters.
 
 | | Agent | What it does |
 |---|---|---|
-| 📄 | Parser | Document → structured plan, re-ranked by consequence, with a plain-language sentence under anything fatal |
-| 💊 | Reconciler | Compares the discharge list against the FHIR record; finds contradictions and refuses to resolve them |
-| 📅 | Scheduler | Books every follow-up into the Cloud Healthcare API |
-| 🏥 | Pharmacist | Turns "twice daily for 12 months" into a real clock; refuses anything it would have to guess at |
-| 👁 | Watchman | Monitors against the red flags on *this* document, not a generic alarm |
-| 🗣 | Coach | One question a day, chosen from what is genuinely unknown — and sends nothing when there is nothing to learn |
-| 🚨 | Escalator | The only path to a clinical decision, and the only agent allowed to decide a human is *not* needed |
+| Pa | Parser | Document → structured plan, re-ranked by consequence, with a plain-language sentence under anything fatal |
+| Rc | Reconciler | Compares the discharge list against the FHIR record; finds contradictions and refuses to resolve them |
+| Sc | Scheduler | Books every follow-up into the Cloud Healthcare API |
+| Ph | Pharmacist | Turns "twice daily for 12 months" into a real clock; refuses anything it would have to guess at |
+| Wa | Watchman | Monitors against the red flags on *this* document, not a generic alarm |
+| Co | Coach | One question a day, chosen from what is genuinely unknown — and sends nothing when there is nothing to learn |
+| Es | Escalator | The only path to a clinical decision, and the only agent allowed to decide a human is *not* needed |
 
 ---
 
@@ -144,8 +144,12 @@ Flash · Agent Development Kit · A2A agent cards.**
 Agents communicate through Pub/Sub messages and Firestore task documents, never
 direct function calls. One topic, one push subscription per agent, separated by
 an attribute filter — `dispatch` publishes with `agent="scheduler"` and has no
-idea what a scheduler is or where it runs. Moving any agent to its own Cloud Run
-service is a push-endpoint change, not a refactor.
+idea what a scheduler is or where it runs.
+
+That claim is demonstrated, not asserted: **the Scheduler runs on its own Cloud
+Run service.** Extracting it was a push-endpoint change and zero code changes,
+the registry shows per-agent placement, and the Failure Drill now kills a worker
+on one service while the console keeps serving from another.
 
 Model tiers were chosen from measurements on this project's own prompts rather
 than a datasheet: Flash-Lite for structured extraction on the hot path,
@@ -218,6 +222,7 @@ instruction clips. Cloud Trace across the fan-out.
 | | |
 |---|---|
 | Live app | https://vitahome-web-205100594497.us-central1.run.app |
+| Scheduler (its own service) | https://vitahome-scheduler-205100594497.us-central1.run.app/health |
 | Kill an agent yourself | https://vitahome-web-205100594497.us-central1.run.app/console/drill |
 | 200 fleets | https://vitahome-web-205100594497.us-central1.run.app/console/fleets |
 | Architecture | https://vitahome-web-205100594497.us-central1.run.app/architecture |

@@ -211,6 +211,22 @@ python3 -c "import sys;sys.exit(0 if int('$W1')>=2 else 1)" \
   && ok "more than one distinct worker id ($W1) — a real process died" \
   || bad "only $W1 worker id — the kill may not have landed"
 
+# --------------------------------------------------- 6b. the split fleet ---
+hd "the decoupling, demonstrated"
+REG=$(curl -s --max-time 20 "$G/registry")
+SVC=$(echo "$REG" | jq_ "
+a=[x for x in d['agents'] if x['displayName']=='Scheduler'][0]
+print(a.get('service',''))")
+case "$SVC" in
+  https://vitahome-scheduler*) ok "Scheduler runs on its own Cloud Run service" ;;
+  *) bad "Scheduler service field is '$SVC' — the split is not visible" ;;
+esac
+echo "$REG" | jq_ "
+others=[x for x in d['agents'] if x['displayName']!='Scheduler']
+print('OK' if all(x.get('service')=='gateway' for x in others) else 'NO')" \
+  | grep -q OK && ok "the other six still on the gateway — the split was one routing change" \
+  || bad "unexpected service map for the other agents"
+
 # ------------------------------------------------------ 7. compliance -----
 hd "compliance"
 SC=$(curl -s --max-time 150 -X POST "$G/compliance/scan" -H 'Content-Type: application/json' -d '{
