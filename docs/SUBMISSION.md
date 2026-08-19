@@ -222,11 +222,11 @@ instruction clips. Cloud Trace across the fan-out.
 
 | | |
 |---|---|
-| Live app | https://vitahome-web-205100594497.us-central1.run.app |
+| Live app | https://vitahome.vitamedas.com |
 | Scheduler (its own service) | https://vitahome-scheduler-205100594497.us-central1.run.app/health |
-| Kill an agent yourself | https://vitahome-web-205100594497.us-central1.run.app/console/drill |
-| 200 fleets | https://vitahome-web-205100594497.us-central1.run.app/console/fleets |
-| Architecture | https://vitahome-web-205100594497.us-central1.run.app/architecture |
+| Kill an agent yourself | https://vitahome.vitamedas.com/console/drill |
+| 200 fleets | https://vitahome.vitamedas.com/console/fleets |
+| Architecture | https://vitahome.vitamedas.com/architecture |
 | Agent registry (A2A cards) | https://vitahome-gateway-205100594497.us-central1.run.app/registry |
 | Substrate health | https://vitahome-gateway-205100594497.us-central1.run.app/health/deep |
 | Source | https://github.com/bayraktartahsin/vitahome |

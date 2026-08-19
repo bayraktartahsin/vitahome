@@ -27,7 +27,7 @@ type Cue = {
   stage?: string;
 };
 
-const STAGE = "https://vitahome-web-205100594497.us-central1.run.app";
+const STAGE = "https://vitahome.vitamedas.com";
 
 const CUES: Cue[] = [
   { kind: "stage", text: "Stage window: open /capture", stage: "/capture",

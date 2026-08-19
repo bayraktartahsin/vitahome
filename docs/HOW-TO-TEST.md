@@ -10,13 +10,13 @@ anywhere in this project.
 
 ## A · Click through it — 5 minutes
 
-**https://vitahome-web-205100594497.us-central1.run.app**
+**https://vitahome.vitamedas.com**
 
 Do these in order. It takes about five minutes and covers every claim.
 
 ### 1 · The parse — 60 seconds
 
-Go to **[/capture](https://vitahome-web-205100594497.us-central1.run.app/capture)**
+Go to **[/capture](https://vitahome.vitamedas.com/capture)**
 and press **"Use the sample discharge summary."**
 
 **What to look for**
@@ -39,7 +39,7 @@ says so rather than pretending otherwise.)
 
 ### 2 · The refusal — 90 seconds
 
-Go to **[/console](https://vitahome-web-205100594497.us-central1.run.app/console)**.
+Go to **[/console](https://vitahome.vitamedas.com/console)**.
 Press **"reset"**, then **"seed patient"**, then **"reconcile medications"**.
 
 Wait ~20 seconds.
@@ -58,7 +58,7 @@ and watch the audit stream on the right fill up.
 ### 3 · The refusal spreading — the best 30 seconds
 
 Still on `/console`, open a second tab at
-**[/today](https://vitahome-web-205100594497.us-central1.run.app/today)**.
+**[/today](https://vitahome.vitamedas.com/today)**.
 
 Back on `/console`, dispatch the Pharmacist and the Coach. The quickest way is
 the terminal:
@@ -88,7 +88,7 @@ one went looking for the fact that would settle it.
 
 ### 4 · Kill an agent — 90 seconds
 
-Go to **[/console/drill](https://vitahome-web-205100594497.us-central1.run.app/console/drill)**.
+Go to **[/console/drill](https://vitahome.vitamedas.com/console/drill)**.
 
 Press **arm** on the Scheduler, then **"▸ Start a task"**.
 
@@ -134,7 +134,7 @@ That is the interesting behaviour. Anything can be built to panic.
 
 ### 6 · Scale — 60 seconds
 
-Go to **[/console/fleets](https://vitahome-web-205100594497.us-central1.run.app/console/fleets)**.
+Go to **[/console/fleets](https://vitahome.vitamedas.com/console/fleets)**.
 
 Press **"seed 200 fleets"** (~6s), then **"hand work to all 200"**.
 

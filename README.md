@@ -53,7 +53,7 @@ Agents communicate through **Pub/Sub messages and Firestore task documents — n
 
 | | |
 |---|---|
-| Web | https://vitahome-web-205100594497.us-central1.run.app |
+| Web | **https://vitahome.vitamedas.com** (also at https://vitahome-web-205100594497.us-central1.run.app) |
 | Gateway | https://vitahome-gateway-205100594497.us-central1.run.app |
 | Fleet registry (A2A cards) | [`/registry`](https://vitahome-gateway-205100594497.us-central1.run.app/registry) |
 | Substrate health | [`/health/deep`](https://vitahome-gateway-205100594497.us-central1.run.app/health/deep) |
