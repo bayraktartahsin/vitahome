@@ -37,7 +37,7 @@ Not by where it was printed. By consequence.
 ~3 seconds.
 
 **4/**
-The part I didn't expect to matter most: four of the seven agents can refuse.
+The part I didn't expect to matter most: every agent on the bus can refuse.
 
 The document says "STOP amlodipine." Three lines later it says "resume home
 medications as previously prescribed."

@@ -37,7 +37,7 @@ one check-in question a day chosen from what the fleet does not yet know.
 Nobody types anything. There is no chat window — a chatbot that gives advice
 hands the work back to the person who was already overwhelmed.
 
-And four of the seven agents can refuse. When the discharge summary says both
+And every agent on the bus can refuse. When the discharge summary says both
 "STOP amlodipine" and "resume home medications", VitaHome does not pick the
 likelier reading. It assembles both, states why it cannot choose, and puts a
 licensed human in front of the decision.
