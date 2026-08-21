@@ -87,7 +87,7 @@ def test_books_known_specialty_through_three_steps(monkeypatch):
     summary = scheduler.body("p_hero", "t_1", _task())
 
     assert fake.calls == ["resolve_provider", "fhir_appointment", "calendar_event", "confirm"]
-    assert "cardiology" in summary
+    assert "Cardiology" in summary
     assert "systemsTouched" in fake.bumps, "a real external system was touched"
 
     # the care plan must reflect the booking, with a traceable external ref
@@ -113,7 +113,7 @@ def test_replay_skips_the_fhir_write(monkeypatch):
 
     monkeypatch.setattr(scheduler.fhir, "create", _explode)
     summary = scheduler.body("p_hero", "t_1", _task())
-    assert "cardiology" in summary
+    assert "Cardiology" in summary
 
 
 def test_appointment_slot_never_lands_on_a_weekend():

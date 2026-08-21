@@ -105,7 +105,8 @@ export default function Console() {
           <Stat label="refused — ambiguous" v={ledger?.refused} cls="text-con-hold" />
           <Stat label="escalated — awaiting" v={ledger?.escalated} cls="text-con-warn" />
           <Stat label="closed by a human" v={ledger?.humanDecisions} cls="text-con-info" />
-          <Stat label="systems written" v={ledger?.systemsTouched} cls="text-con-ink" />
+          <Stat label="systems written" v={ledger?.systemsTouched} cls="text-con-ink"
+                wide />
         </section>
         <p className="mt-2 font-mono text-[10px] leading-relaxed text-con-ink2">
           verifiable counts only — no estimated savings, no invented dollars.
@@ -120,38 +121,38 @@ export default function Console() {
         {/* -------------------------------------------------------- runs --- */}
         <div className="mt-6 flex flex-wrap items-center gap-2">
           <Btn dark kind="outline" busy={busy === "seed"}
-               onClick={() => act("seed", "seeding the patient", "/demo/seed")}>
+               auto="seed" onClick={() => act("seed", "seeding the patient", "/demo/seed")}>
             seed patient
           </Btn>
           <Btn dark kind="outline" busy={busy === "book"}
-               onClick={() => act("book", "booking every follow-up", `/demo/book-followups?patientId=${PID}`)}>
+               auto="book" onClick={() => act("book", "booking every follow-up", `/demo/book-followups?patientId=${PID}`)}>
             book follow-ups
           </Btn>
           <Btn dark kind="outline" busy={busy === "recon"}
-               onClick={() => act("recon", "reconciling medications", "/demo/dispatch",
+               auto="recon" onClick={() => act("recon", "reconciling medications", "/demo/dispatch",
                  { patientId: PID, agent: "reconciler" })}>
             reconcile medications
           </Btn>
           <Btn dark kind="outline" busy={busy === "pharm"}
-               onClick={() => act("pharm", "building the dose schedule", "/demo/dispatch",
+               auto="pharm" onClick={() => act("pharm", "building the dose schedule", "/demo/dispatch",
                  { patientId: PID, agent: "pharmacist" })}>
             dose schedule
           </Btn>
           <Btn dark kind="outline" busy={busy === "coach"}
-               onClick={() => act("coach", "choosing today's question", "/demo/dispatch",
+               auto="coach" onClick={() => act("coach", "choosing today's question", "/demo/dispatch",
                  { patientId: PID, agent: "coach" })}>
             daily check-in
           </Btn>
           <Btn dark kind="outline" busy={busy === "cp"}
-               onClick={() => act("cp", "reporting chest pain", `/demo/observe?scenario=chest_pain&patientId=${PID}`)}>
+               auto="chest" onClick={() => act("cp", "reporting chest pain", `/demo/observe?scenario=chest_pain&patientId=${PID}`)}>
             report: chest pain
           </Btn>
           <Btn dark kind="outline" busy={busy === "lh"}
-               onClick={() => act("lh", "reporting lightheadedness", `/demo/observe?scenario=lightheaded_on_standing&patientId=${PID}`)}>
+               auto="light" onClick={() => act("lh", "reporting lightheadedness", `/demo/observe?scenario=lightheaded_on_standing&patientId=${PID}`)}>
             report: lightheaded
           </Btn>
           <Btn dark kind="danger" busy={busy === "reset"}
-               onClick={() => act("reset", "resetting the demo patient", `/demo/reset?patientId=${PID}`)}>
+               auto="reset" onClick={() => act("reset", "resetting the demo patient", `/demo/reset?patientId=${PID}`)}>
             reset
           </Btn>
         </div>
@@ -159,7 +160,7 @@ export default function Console() {
           <StatusLine dark note={note} />
           {!note && (
             <p className="font-mono text-[10px] text-con-ink2">
-              async agents take 15–25s to land — watch the audit stream fill on the right
+              async agents take 15–25s to land — watch the audit stream fill
             </p>
           )}
         </div>
@@ -224,9 +225,14 @@ export default function Console() {
 
 /* ---------------------------------------------------------------- pieces -- */
 
-function Stat({ label, v, cls }: { label: string; v?: number; cls: string }) {
+function Stat({ label, v, cls, wide = false }: {
+  label: string; v?: number; cls: string;
+  /** Span both columns on a narrow screen — five tiles in a two-column grid
+      otherwise leave a hole that reads as a broken layout. */
+  wide?: boolean;
+}) {
   return (
-    <div className="bg-con-panel px-4 py-3.5">
+    <div className={`bg-con-panel px-4 py-3.5 ${wide ? "col-span-2 sm:col-span-1" : ""}`}>
       <div className={`animate-odometer font-mono text-[26px] font-medium leading-none ${cls}`}>
         {v ?? "·"}
       </div>

@@ -64,6 +64,13 @@ class Settings(BaseSettings):
     # Who the fleet's calendar is shared with — the account whose phone the
     # events appear on. Change per deployment, not per booking.
     calendar_share_with: str = "info@gravitilabs.com"
+    # Which fleets may write to that shared calendar. It belongs to a person,
+    # so the load-test cohort stays off it: 200 synthetic fleets booking into
+    # the same 10:00 slot buries the demo patient's real appointments and makes
+    # the calendar useless to look at. Cohort fleets still write to FHIR — the
+    # scale claim is about the fleet, not about filling somebody's diary.
+    # Set to "*" to let every fleet write.
+    calendar_patients: str = "p_hero"
 
     # Optional gate for destructive demo endpoints (reset/cohort/storm/chaos).
     # Empty = open, which is the deliberate posture while judges need to drive
@@ -82,6 +89,11 @@ class Settings(BaseSettings):
     port: int = 8080
     log_level: str = "INFO"
     workers_base_url: str = ""       # set on deploy; used for Pub/Sub push endpoints
+
+    def calendar_writes_for(self, patient_id: str) -> bool:
+        """May this fleet write to the calendar shared with a real person?"""
+        allowed = {p.strip() for p in self.calendar_patients.split(",") if p.strip()}
+        return "*" in allowed or patient_id in allowed
 
 
 settings = Settings()

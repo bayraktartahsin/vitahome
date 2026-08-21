@@ -26,10 +26,19 @@ log = logging.getLogger("vitahome.scheduler")
 
 # A tiny directory stands in for a real provider network. Declared, not hidden:
 # the console labels this "provider directory (demo)".
+# specialty -> (who you are seeing, where, what to call the appointment)
+#
+# The clinician and the specialty are separate fields on purpose. They used to
+# be one string ("Dr. Chen · Cardiology"), which meant every calendar entry the
+# family saw read "Cardiology — Dr. Chen · Cardiology". A title on somebody's
+# phone is a piece of design, not a log line.
 _DIRECTORY = {
-    "cardiology":   ("Dr. Chen · Cardiology",       "Mercy General · Heart Center"),
-    "primary care": ("Dr. Alvarez · Primary Care",  "Mercy General · Family Medicine"),
-    "cardiac rehab": ("Cardiac Rehab Intake",       "Mercy General · Rehabilitation"),
+    "cardiology":    ("Dr. Chen",            "Mercy General · Heart Center",
+                      "Cardiology follow-up"),
+    "primary care":  ("Dr. Alvarez",         "Mercy General · Family Medicine",
+                      "Primary care follow-up"),
+    "cardiac rehab": ("the rehab team",      "Mercy General · Rehabilitation",
+                      "Cardiac rehab intake"),
 }
 
 
@@ -74,8 +83,9 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
 
     # ---- step 1: which provider -------------------------------------------
     def _resolve(_key: str) -> dict[str, Any]:
-        practitioner, location = _DIRECTORY[specialty]
+        practitioner, location, title = _DIRECTORY[specialty]
         return {"practitioner": practitioner, "location": location,
+                "title": title,
                 "specialty": specialty, "source": "provider directory (demo)"}
 
     provider = ledger.run_step(pid, task_id, "scheduler", "resolve_provider", _resolve)
@@ -105,6 +115,14 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
     appt = ledger.run_step(pid, task_id, "scheduler", "fhir_appointment", _appointment)
     ledger.bump_ledger(pid, "systemsTouched")
 
+    # A replayed step hands back the result the *previous* attempt stored, so a
+    # field added after that attempt began will not be there. The drill replays
+    # steps on purpose, and a deploy can land between two attempts of the same
+    # task — so every read of a step result carries its own fallback rather than
+    # assuming this process wrote it.
+    title = provider.get("title") or f"{provider.get('specialty', 'Follow-up').title()} follow-up"
+    where_at = provider.get("location") or ""
+
     # ---- step 2b: the same booking, on a real phone -----------------------
     # A second, independent external system — a Google Calendar the fleet owns,
     # shared to the family's account. Failure here must never fail the booking:
@@ -114,16 +132,30 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
     def _calendar(key: str) -> dict[str, Any]:
         if not settings.calendar_enabled:
             return {"simulated": True, "note": "calendar disabled by configuration"}
+        # The shared calendar is a real person's phone. The 200-fleet cohort is
+        # a load test — writing it there buries the demo patient's three real
+        # appointments under hundreds of synthetic ones at the same 10:00 slot,
+        # which is exactly what happened. Cohort fleets still book into FHIR;
+        # they just do not spam a human's calendar to prove they can.
+        if not settings.calendar_writes_for(pid):
+            return {"simulated": True,
+                    "note": "cohort fleet — booked in FHIR, kept off the shared calendar"}
         try:
             from ..integrations import calendar
             ev = calendar.create_event(
-                summary=f"{provider['specialty'].title()} — {provider['practitioner']}",
-                description=(f"Follow-up booked autonomously by VitaHome from "
-                             f"discharge instruction {instruction_id or '—'}.\n"
-                             f"Clinical record: {appt.get('externalRef')}"),
+                summary=title,
+                location=where_at,
+                description=(
+                    f"With {provider['practitioner']}.\n\n"
+                    f"Booked by VitaHome from the discharge summary"
+                    f"{f' (instruction {instruction_id})' if instruction_id else ''}.\n"
+                    f"Clinical record: {appt.get('externalRef')}\n\n"
+                    f"Demo booking — the patient record is synthetic."
+                ),
                 start_iso=start.isoformat().replace("+00:00", "Z"),
                 end_iso=end.isoformat().replace("+00:00", "Z"),
                 idem=key,
+                patient_id=pid,
             )
             return {**ev, "externalRef": f"gcal:{ev['eventId']}"}
         except calendar.CalendarUnavailable as e:
@@ -151,4 +183,4 @@ def body(pid: str, task_id: str, task: dict[str, Any]) -> str:
 
     when = start.strftime("%a %d %b, %H:%M")
     where = "FHIR + phone calendar" if not cal.get("simulated") else "FHIR"
-    return f"booked {provider['specialty']} — {provider['practitioner']}, {when} ({where})"
+    return f"booked {title} with {provider['practitioner']}, {when} ({where})"

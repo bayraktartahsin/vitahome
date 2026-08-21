@@ -47,12 +47,20 @@ export default function Drill() {
     run("start", "seeding and dispatching a Scheduler task", async () => {
       say("seeding the hero patient");
       await post("/demo/seed");
-      say("dispatching a Scheduler task — cardiology, 7 days");
+      say("dispatching a Scheduler task — cardiology review, 90 days");
       await post("/demo/dispatch", {
         patientId: patient,
         agent: "scheduler",
-        instructionId: "i_07",
-        payload: { specialty: "cardiology", daysOut: 7 },
+        // A three-month cardiology review — deliberately NOT the 7-day
+        // follow-up that "book follow-ups" already made.
+        //
+        // It used to be the same specialty at the same interval, which put a
+        // second identical entry on the phone at the exact moment the demo
+        // says "one appointment, one calendar event, not two". Two separate
+        // booking requests are correctly two appointments, but a judge looking
+        // at the calendar saw a duplicate and the line read as a lie. The
+        // drill's booking has to be visibly its own.
+        payload: { specialty: "cardiology", daysOut: 90 },
       });
       say("task in flight — the armed step will die when it is reached");
     });
@@ -98,7 +106,7 @@ export default function Drill() {
         </p>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <Btn dark kind="solid" busy={busy === "start"} onClick={start}>
+          <Btn dark kind="solid" busy={busy === "start"} auto="start" onClick={start}>
             Start a task
           </Btn>
           <span className="font-mono text-[11px] text-con-ink2">
@@ -126,7 +134,7 @@ export default function Drill() {
                 {AGENTS[id].duty}
               </span>
               <div className="ml-auto flex gap-2">
-                <Btn dark kind="danger" busy={busy === `arm-${id}`} onClick={() => arm(id)}
+                <Btn dark kind="danger" busy={busy === `arm-${id}`} auto={`arm-${id}`} onClick={() => arm(id)}
                      title="Dies inside its next step — deterministic, still a real crash">
                   arm
                 </Btn>

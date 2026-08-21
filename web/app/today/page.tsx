@@ -154,7 +154,39 @@ export default function Today() {
           </section>
         )}
 
-        {/* ------------------------------------------------------ doses --- */}
+        {/* ------------------------------------------- waiting on care ---
+            Deliberately ABOVE today's doses. "A clinician has to decide before
+            you take this" outranks the routine schedule, both clinically and as
+            the point this product is making — and below the schedule it fell
+            off the bottom of the screen entirely, so the one thing the page
+            exists to say was the one thing you had to scroll for. */}
+        {held.length > 0 && (
+          <section className="mt-8">
+            <h2 className="font-display text-lg font-semibold text-fam-ink">
+              Waiting on the care team
+            </h2>
+            <p className="mt-1 text-[13px] leading-relaxed text-fam-ink2">
+              We didn&rsquo;t guess at these. A clinician has been asked to decide.
+            </p>
+            <div className="mt-3 space-y-2">
+              {held.map((h) => (
+                <div
+                  key={h.drug}
+                  className="rounded-fam border border-fam-line bg-fam-surface p-4 shadow-sheet"
+                  style={{ borderLeft: "3px solid #4A5A78" }}
+                >
+                  <div className="font-medium text-fam-ink">{h.drug}</div>
+                  <div className="mt-0.5 text-[13px] text-fam-ink2">{h.unclear}</div>
+                  <div className="mt-1.5 text-[13px] font-medium text-fam-hold">
+                    Don&rsquo;t take this one until you hear back.
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+      {/* ------------------------------------------------------ doses --- */}
         <div className="mt-10 flex items-baseline justify-between border-b-2 border-fam-ink pb-2">
           <h1 className="font-display text-2xl font-semibold text-fam-ink">Today</h1>
           {times.length > 0 && (
@@ -216,32 +248,6 @@ export default function Today() {
           </div>
         )}
 
-        {/* -------------------------------------------- waiting on care --- */}
-        {held.length > 0 && (
-          <section className="mt-9">
-            <h2 className="font-display text-lg font-semibold text-fam-ink">
-              Waiting on the care team
-            </h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-fam-ink2">
-              We didn&rsquo;t guess at these. A clinician has been asked to decide.
-            </p>
-            <div className="mt-3 space-y-2">
-              {held.map((h) => (
-                <div
-                  key={h.drug}
-                  className="rounded-fam border border-fam-line bg-fam-surface p-4 shadow-sheet"
-                  style={{ borderLeft: "3px solid #4A5A78" }}
-                >
-                  <div className="font-medium text-fam-ink">{h.drug}</div>
-                  <div className="mt-0.5 text-[13px] text-fam-ink2">{h.unclear}</div>
-                  <div className="mt-1.5 text-[13px] font-medium text-fam-hold">
-                    Don&rsquo;t take this one until you hear back.
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
 
         <footer className="mt-12 border-t border-fam-line pt-5 text-[12px] leading-relaxed text-fam-ink2">
           VitaHome never diagnoses and never prescribes. It carries out instructions a

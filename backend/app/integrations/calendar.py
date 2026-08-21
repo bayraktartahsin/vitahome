@@ -36,6 +36,7 @@ import base64
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import google.auth
@@ -102,7 +103,10 @@ def _req(method: str, path: str, **kw: Any) -> httpx.Response:
                           timeout=20.0, **kw)
     except httpx.HTTPError as e:
         raise CalendarUnavailable(f"calendar unreachable: {e}") from e
-    if r.status_code >= 400 and r.status_code != 409:
+    # 409 = already imported (the idempotent path). 410 = already deleted, and
+    # 404 = never existed — both mean the caller's intent already holds, so a
+    # cleanup that races itself is not an error.
+    if r.status_code >= 400 and r.status_code not in (409, 410, 404):
         raise CalendarUnavailable(f"calendar {method} {path}: {r.status_code} {r.text[:160]}")
     return r
 
@@ -161,13 +165,25 @@ def calendar_link(cal_id: str | None = None) -> str:
 # events
 # --------------------------------------------------------------------------
 
+# Stamped on every event the fleet writes, so its own entries can always be
+# told apart from anything else on the calendar — and cleaned up without
+# guessing from the title.
+_TAG_KEY = "vitahome"
+
+
 def create_event(*, summary: str, description: str, start_iso: str, end_iso: str,
-                 idem: str) -> dict[str, Any]:
+                 idem: str, location: str = "", patient_id: str = "") -> dict[str, Any]:
     """Create an event exactly once across replays.
 
     The iCalUID is derived from the ledger's idempotency key, and lookup is
     Calendar's own ``iCalUID`` search — the calendar itself becomes part of the
     effectively-once machinery, the same way the FHIR store does.
+
+    Note what that key does and does not promise. It makes a *replay* of one
+    booking idempotent, which is the guarantee the drill demonstrates. Two
+    separate booking requests are two appointments, correctly — so a calendar
+    that has been demoed against for a week accumulates real entries, and
+    ``delete_events`` is how they get cleared.
     """
     cal = ensure_calendar()
     uid = f"{idem.replace(':', '-')}@vitahome.demo"
@@ -178,14 +194,23 @@ def create_event(*, summary: str, description: str, start_iso: str, end_iso: str
     if items:
         ev = items[0]
     else:
-        r = _req("POST", f"/calendars/{cal}/events/import", json={
+        body: dict[str, Any] = {
             "iCalUID": uid,
             "summary": summary,
             "description": description,
             "start": {"dateTime": start_iso, "timeZone": "UTC"},
             "end": {"dateTime": end_iso, "timeZone": "UTC"},
             "status": "confirmed",
-        })
+            "reminders": {"useDefault": False, "overrides": [
+                {"method": "popup", "minutes": 24 * 60},
+                {"method": "popup", "minutes": 60},
+            ]},
+            "extendedProperties": {"private": {
+                _TAG_KEY: "1", "patientId": patient_id or "unknown"}},
+        }
+        if location:
+            body["location"] = location
+        r = _req("POST", f"/calendars/{cal}/events/import", json=body)
         ev = r.json()
         log.info("calendar event created %s", ev.get("id"))
 
@@ -196,6 +221,135 @@ def create_event(*, summary: str, description: str, start_iso: str, end_iso: str
         "iCalUID": uid,
         "system": "Google Calendar API",
     }
+
+
+def delete_events(patient_id: str = "", include_untagged: bool = False) -> dict[str, Any]:
+    """Remove the fleet's own events from the shared calendar.
+
+    Only events this fleet wrote are touched — they carry a private extended
+    property, so nothing else on the calendar is at risk even if the calendar
+    were shared with other content. Pass a patient id to clear one patient's
+    bookings, or nothing to clear all of them.
+
+    Repeated demos leave real appointments behind, which is correct behaviour
+    and also makes the calendar unreadable after a few days. This is the
+    counterpart every side effect that writes to a human's phone should have.
+    """
+    cal = ensure_calendar()
+    params: dict[str, Any] = {"maxResults": 2500, "singleEvents": "true"}
+    if include_untagged:
+        # Events written before the fleet started tagging its own entries carry
+        # no property to filter on. This calendar is created and owned by the
+        # fleet and holds nothing else, so clearing it wholesale is the only way
+        # to reach them — and is why the flag has to be asked for by name.
+        pass
+    elif patient_id:
+        params["privateExtendedProperty"] = [f"{_TAG_KEY}=1", f"patientId={patient_id}"]
+    else:
+        params["privateExtendedProperty"] = f"{_TAG_KEY}=1"
+
+    ids: list[str] = []
+    page = None
+    while True:
+        if page:
+            params["pageToken"] = page
+        r = _req("GET", f"/calendars/{cal}/events", params=params)
+        payload = r.json()
+        ids += [ev["id"] for ev in payload.get("items", []) if ev.get("id")]
+        page = payload.get("nextPageToken")
+        if not page:
+            break
+
+    # One request per event, so sixty events is sixty round trips — about six
+    # seconds serially, in front of a button somebody presses while a camera is
+    # warming up. They are independent deletes, so they go concurrently.
+    def _kill(event_id: str) -> bool:
+        try:
+            _req("DELETE", f"/calendars/{cal}/events/{event_id}")
+            return True
+        except CalendarUnavailable:
+            return False
+
+    deleted = failed = 0
+    if ids:
+        with ThreadPoolExecutor(max_workers=min(8, len(ids))) as pool:
+            for ok in pool.map(_kill, ids):
+                if ok:
+                    deleted += 1
+                else:
+                    failed += 1
+
+    log.info("calendar cleanup: %s deleted, %s failed", deleted, failed)
+    scope = ("every event on the fleet calendar" if include_untagged
+             else patient_id or "all tagged fleet events")
+    return {"deleted": deleted, "failed": failed, "calendarId": cal, "scope": scope}
+
+
+def list_calendars() -> dict[str, Any]:
+    """Diagnostic view of every calendar this account holds."""
+    payload = _req("GET", "/users/me/calendarList",
+                   params={"maxResults": 250}).json()
+    items = []
+    for c in payload.get("items", []):
+        items.append({"id": c.get("id"), "summary": c.get("summary"),
+                      "accessRole": c.get("accessRole"),
+                      "primary": bool(c.get("primary"))})
+    mine = [c for c in items if c["summary"] == settings.calendar_summary]
+    return {"total": len(items), "calendars": items,
+            "matchingFleetName": len(mine),
+            "duplicateCalendars": len(mine) > 1}
+
+
+def list_events() -> list[dict[str, Any]]:
+    """Every event the fleet has on the calendar, with its idempotency key.
+
+    The iCalUID is what makes a replay find its own event instead of writing a
+    second one, so when something looks duplicated this is the field that
+    settles it: two entries sharing a UID is a bug here, two entries with
+    different UIDs are two genuine bookings.
+    """
+    cal = ensure_calendar()
+    out: list[dict[str, Any]] = []
+    page = None
+    while True:
+        params: dict[str, Any] = {"maxResults": 2500, "singleEvents": "true",
+                                  "orderBy": "startTime"}
+        if page:
+            params["pageToken"] = page
+        payload = _req("GET", f"/calendars/{cal}/events", params=params).json()
+        for ev in payload.get("items", []):
+            out.append({
+                "summary": ev.get("summary"),
+                "start": (ev.get("start") or {}).get("dateTime"),
+                "iCalUID": ev.get("iCalUID"),
+                "id": ev.get("id"),
+                "patientId": ((ev.get("extendedProperties") or {})
+                              .get("private") or {}).get("patientId"),
+            })
+        page = payload.get("nextPageToken")
+        if not page:
+            return out
+
+
+def count_events() -> int:
+    """How many events the fleet currently has on the shared calendar.
+
+    Worth surfacing rather than inferring: a calendar quietly accumulating
+    entries across rehearsals is invisible until it is on camera, and by then
+    the demo patient's three appointments are lost among dozens.
+    """
+    cal = ensure_calendar()
+    total, page = 0, None
+    while True:
+        params: dict[str, Any] = {"maxResults": 2500, "singleEvents": "true",
+                                  "fields": "items/id,nextPageToken"}
+        if page:
+            params["pageToken"] = page
+        payload = _req("GET", f"/calendars/{cal}/events", params=params).json()
+        total += len(payload.get("items", []))
+        page = payload.get("nextPageToken")
+        if not page:
+            return total
 
 
 def ping() -> dict[str, Any]:

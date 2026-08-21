@@ -14,14 +14,20 @@ buys.
 
 ## 2 · Record the video (60–90 min including rehearsal)
 
-- Script: `docs/VIDEO-SCRIPT.md`. Rehearse the full take twice before recording.
+- Script and full instructions: `docs/RECORD-NOW.md`. The app drives the demo;
+  you only read the cue on screen. Rehearse from Part D twice before recording.
 - Print the discharge summary — the paper prop is the opening and closing shot.
   The text is in `backend/app/sim/hero_patient.py`.
 - One take, no edits. If something breaks, narrate it and keep going — the
   script has a line for exactly that.
 - Read numbers off the screen, never from memory (the parse timer, the SLA
   clock, the worker ids).
-- Upload to YouTube as **unlisted**, then paste the URL into the form.
+- Keep it **under 4 minutes** — only the first four are judged, and the
+  autopilot is built to land at 3:52.
+- Show the backend on Google Cloud. The autopilot does this for you: it puts
+  the gateway's `*.run.app` URL in the address bar for the substrate panel.
+- Upload to YouTube as **Public** — the rules require the video to be publicly
+  visible. Not unlisted, not private. Then paste the URL into the form.
 
 ## 3 · Fill the Devpost form (15 min)
 

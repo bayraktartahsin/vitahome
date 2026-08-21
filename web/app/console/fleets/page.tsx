@@ -67,7 +67,7 @@ export default function Fleets() {
 
         <div className="mt-6 flex flex-wrap items-center gap-2">
           <Btn dark kind="outline" busy={busy === "seed"}
-               onClick={() => run("seed", "seeding 200 fleets", () => post("/demo/cohort?count=200").then(poll))}>
+               auto="cohort" onClick={() => run("seed", "seeding 200 fleets", () => post("/demo/cohort?count=200").then(poll))}>
             seed 200 fleets
           </Btn>
           <Btn dark kind="outline" busy={busy === "s50"}

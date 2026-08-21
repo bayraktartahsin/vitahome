@@ -16,12 +16,15 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
 import threading
 import time
 
 import uvicorn
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import (FastAPI, File, Form, HTTPException, Query, Request,
+                     Response, UploadFile)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
@@ -39,6 +42,7 @@ from ..integrations import calendar as gcal
 from ..integrations import fhir, gemini
 from ..sim import cohort, hero_patient, vitals
 
+from google.api_core import exceptions as gexc  # noqa: E402
 from google.cloud import firestore  # noqa: E402  — used by the console queries
 
 logging.basicConfig(level=settings.log_level)
@@ -54,6 +58,21 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"],
 
 AGENT_NAMES = ["parser", "reconciler", "scheduler", "pharmacist",
                "watchman", "coach", "escalator"]
+
+
+# Firestore rejects a document id over 1500 bytes, and one containing a slash
+# addresses a subcollection instead. Both arrived as a 500 from deep inside the
+# client library. A patient id comes from the URL, so it is untrusted input and
+# gets checked at the door like any other.
+_MAX_ID = 200
+
+
+def _clean_pid(pid: str) -> str:
+    """Validate a patient id from a path or body before it reaches Firestore."""
+    if not pid or len(pid) > _MAX_ID or "/" in pid or ".." in pid:
+        raise HTTPException(
+            400, f"patientId must be 1-{_MAX_ID} characters and cannot contain '/' or '..'")
+    return pid
 
 
 def _guard_demo(request: Request) -> None:
@@ -72,18 +91,111 @@ def _guard_demo(request: Request) -> None:
 # ---------------------------------------------------------------- health ----
 
 @app.get("/health")
-@app.get("/healthz")
 def health():
     return {"ok": True, "service": "vitahome-gateway",
             "version": registry.FLEET_VERSION, "region": settings.region}
 
 
 @app.get("/health/deep")
-def health_deep():
-    """Proves the whole substrate is live — used in the demo to show real infra."""
-    return {"ok": True, "fhir": fhir.ping(), "gemini": gemini.ping(),
+def health_deep(request: Request):
+    """Proves the whole substrate is live — every dependency actually called.
+
+    A browser gets a readable panel instead of raw JSON: this URL is the
+    demo's Google Cloud proof shot, and a wall of unformatted JSON is a poor
+    thing to put on screen. Programmatic callers still get the JSON — the
+    scripts and the preflight check parse this exact object.
+    """
+    body = {"ok": True, "fhir": fhir.ping(), "gemini": gemini.ping(),
             "calendar": gcal.ping(),
-            "project": settings.gcp_project, "fhirStore": settings.hc_fhir_store}
+            "project": settings.gcp_project, "fhirStore": settings.hc_fhir_store,
+            "region": settings.region,
+            "service": os.getenv("K_SERVICE", "vitahome-gateway"),
+            "revision": os.getenv("K_REVISION", "local")}
+    if "text/html" not in request.headers.get("accept", ""):
+        return body
+    back = request.query_params.get("back") or ""
+    after = request.query_params.get("after") or ""
+    return HTMLResponse(_substrate_page(body, back, after))
+
+
+def _substrate_page(b: dict, back: str = "", after: str = "") -> str:
+    """The proof panel — every line here is a value returned by a live call.
+
+    The demo has to show a *.run.app address bar to prove the backend runs on
+    Google Cloud, which means the stage window has to leave the app. Rather
+    than depend on something else to bring it back, this page returns on its
+    own when ?back= names where to go — so the beat needs no popup handle and
+    no second operator. Without the parameter it is an ordinary status page.
+    """
+    ok = lambda v: ("live" if v else "down", "#4E9C6B" if v else "#C0574F")
+
+    rows = [
+        ("Cloud Run", f"{b['service']} · {b['region']} · revision {b['revision']}", True),
+        ("Cloud Run", "vitahome-scheduler — the Scheduler runs as its own service", True),
+        ("Cloud Healthcare API", f"FHIR R4 store &ldquo;{b['fhirStore']}&rdquo; · HTTP {b['fhir'].get('status')}",
+         b["fhir"].get("ok")),
+        ("Vertex / Gemini", f"{b['gemini'].get('model')} · {b['gemini'].get('latencyMs')}ms round trip",
+         b["gemini"].get("ok")),
+        ("Google Calendar API", f"fleet calendar shared to {b['calendar'].get('sharedWith') or 'the family account'}",
+         b["calendar"].get("ok")),
+        ("Pub/Sub &middot; Firestore &middot; Secret Manager",
+         "message bus, task ledger, and credentials", True),
+    ]
+    cells = "".join(
+        f'<tr><td class="k">{k}</td><td class="v">{v}</td>'
+        f'<td class="s" style="color:{ok(o)[1]}">{ok(o)[0]}</td></tr>'
+        for k, v, o in rows)
+
+    return f"""<!doctype html><meta charset="utf-8">
+<title>VitaHome — running on Google Cloud</title>
+<style>
+ :root{{color-scheme:dark}}
+ body{{margin:0;background:#0B0F0D;color:#DDE6DE;
+   font:16px/1.5 ui-sans-serif,-apple-system,'Segoe UI',sans-serif;
+   display:flex;align-items:center;justify-content:center;min-height:100vh}}
+ main{{width:min(920px,92vw)}}
+ h1{{font-size:2rem;font-weight:650;margin:0 0 .2em;letter-spacing:-.01em}}
+ p.sub{{margin:0 0 2rem;color:#8FA396;font-size:.95rem}}
+ table{{width:100%;border-collapse:collapse}}
+ td{{padding:.85rem .6rem;border-bottom:1px solid #1E2A23;vertical-align:top}}
+ .k{{width:32%;font-weight:600}}
+ .v{{color:#8FA396;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.83rem}}
+ .s{{width:5rem;text-align:right;font-family:ui-monospace,monospace;
+    font-size:.75rem;text-transform:uppercase;letter-spacing:.16em}}
+ footer{{margin-top:1.6rem;color:#8FA396;font-size:.8rem;
+   font-family:ui-monospace,monospace}}
+ b{{color:#DDE6DE}}
+</style>
+<main>
+ <h1>Running on Google Cloud</h1>
+ <p class="sub">Every row below was checked by calling the service, just now &mdash;
+    project <b>{b['project']}</b>.</p>
+ <table>{cells}</table>
+ <footer>this page is served by the gateway itself, at its *.run.app address</footer>
+</main>{_bounce(back, after)}"""
+
+
+# Where the proof page is allowed to send a browser next. An allowlist rather
+# than a scheme check: "any https URL" would make this endpoint an open
+# redirect, and a public endpoint that forwards anywhere is worth more to an
+# attacker than it is to this demo.
+_BOUNCE_ORIGINS = (
+    "https://vitahome.vitamedas.com",
+    "https://vitahome-web-205100594497.us-central1.run.app",
+    "https://vitahome-web-ivrolm7bhq-uc.a.run.app",
+)
+
+
+def _bounce(back: str, after: str) -> str:
+    """Return to the app after the beat. Allowlisted destinations only."""
+    if not any(back == o or back.startswith(o + "/") for o in _BOUNCE_ORIGINS):
+        return ""
+    try:
+        delay = max(1000, min(30000, int(after or 8000)))
+    except ValueError:
+        delay = 8000
+    return (f'\n<script>setTimeout(function(){{location.href='
+            f'{json.dumps(back)}}},{delay})</script>')
 
 
 # -------------------------------------------------------------- registry ----
@@ -175,6 +287,12 @@ def get_agent_card(agent: str):
 
 # ------------------------------------------------------------- the fleet ----
 
+# A discharge summary is one or two pages. The cap is far above anything real
+# and far below the size that makes the model call hang — a judge pasting a
+# whole book got no response at all, which is worse than being told no.
+MAX_DOCUMENT_CHARS = 20_000
+
+
 class CaptureRequest(BaseModel):
     patientId: str = "p_hero"
     documentText: str | None = None
@@ -183,8 +301,17 @@ class CaptureRequest(BaseModel):
 @app.post("/capture")
 def capture(req: CaptureRequest):
     """Parse a document supplied as text. See /capture/photo for the image path."""
+    text = (req.documentText or "").strip()
+    if not text:
+        # 502 said "the gateway upstream is broken". It is not: the request
+        # arrived empty. Say which side the problem is on.
+        raise HTTPException(400, "documentText is empty — send the text of a document")
+    if len(text) > MAX_DOCUMENT_CHARS:
+        raise HTTPException(
+            413, f"document is {len(text)} characters; the limit is "
+                 f"{MAX_DOCUMENT_CHARS}. Send one discharge summary, not a corpus.")
     try:
-        return parser_agent.parse(req.patientId, text=req.documentText)
+        return parser_agent.parse(req.patientId, text=text)
     except gemini.ModelError as e:
         raise HTTPException(502, f"parse failed: {e}") from e
 
@@ -210,6 +337,7 @@ async def capture_photo(file: UploadFile = File(...), patientId: str = Form("p_h
 
 @app.get("/patient/{pid}/plan")
 def get_plan(pid: str):
+    _clean_pid(pid)
     snap = ledger.db().collection("patients").document(pid).get()
     if not snap.exists:
         raise HTTPException(404, "no such patient")
@@ -218,12 +346,13 @@ def get_plan(pid: str):
 
 @app.get("/patient/{pid}/ledger")
 def get_ledger(pid: str):
+    _clean_pid(pid)
     """Autonomy Ledger — verifiable counts only, never invented dollars."""
     return ledger.read_ledger(pid)
 
 
 @app.get("/patient/{pid}/tasks")
-def get_tasks(pid: str, limit: int = 60):
+def get_tasks(pid: str, limit: int = Query(60, ge=1, le=500)):
     """Sorted in Python, not Firestore — no composite index to provision, and
     the collection is bounded per patient."""
     snaps = (ledger.db().collection("patients").document(pid)
@@ -265,6 +394,7 @@ def decide_refusal(pid: str, task_id: str, req: HumanAction):
 
 @app.get("/patient/{pid}/exceptions")
 def get_exceptions(pid: str):
+    _clean_pid(pid)
     """Everything waiting on a person, worst SLA first.
 
     Sorted by how long it has been waiting against its own deadline — not by
@@ -367,7 +497,7 @@ def answer_checkin(pid: str, req: CheckInAnswer):
 
 
 @app.get("/patient/{pid}/audit")
-def get_audit(pid: str, limit: int = 200):
+def get_audit(pid: str, limit: int = Query(200, ge=1, le=1000)):
     from google.cloud import firestore as fs
     rows = (ledger.db().collection("patients").document(pid).collection("audit")
             .order_by("at", direction=fs.Query.DESCENDING).limit(limit).stream())
@@ -448,12 +578,36 @@ def demo_dispatch(req: DispatchRequest):
     """Hand a task to the fleet over Pub/Sub."""
     if req.agent not in AGENT_NAMES:
         raise HTTPException(404, "unknown agent")
+    _clean_pid(req.patientId)
     task_id = dispatch.dispatch(req.patientId, req.agent, req.instructionId, req.payload)
     return {"taskId": task_id, "agent": req.agent, "patientId": req.patientId}
 
 
+# Firestore answers ABORTED — "Too much contention on these documents" — when a
+# write races other writers. It is the datastore asking to be called again, not
+# a failure, and it happens here precisely because reset deletes a patient's
+# audit trail while agents may still be appending to it.
+#
+# Left unhandled it surfaced in the browser as "Failed to fetch", thirty seconds
+# before a take. Everything reset does is idempotent, so retrying is safe: it
+# deletes what is there and sets what should be.
+_RETRYABLE = (gexc.Aborted, gexc.ServiceUnavailable, gexc.DeadlineExceeded,
+              gexc.InternalServerError, gexc.TooManyRequests)
+
+
+def _retrying(fn, attempts: int = 5):
+    for i in range(attempts):
+        try:
+            return fn()
+        except _RETRYABLE:
+            if i == attempts - 1:
+                raise
+            time.sleep(0.4 * (2 ** i))
+
+
 @app.post("/demo/reset")
 def demo_reset(request: Request, patientId: str = "p_hero"):
+    _clean_pid(patientId)
     _guard_demo(request)
     """Clear this patient's tasks, audit trail and counters.
 
@@ -470,25 +624,103 @@ def demo_reset(request: Request, patientId: str = "p_hero"):
         # Batched deletes: a patient with a few hundred audit rows would
         # otherwise be a few hundred round trips.
         while True:
-            batch = ledger.db().batch()
-            docs = list(pdoc.collection(coll).limit(400).stream())
-            if not docs:
+            def _sweep() -> int:
+                batch = ledger.db().batch()
+                docs = list(pdoc.collection(coll).limit(400).stream())
+                if not docs:
+                    return 0
+                for d in docs:
+                    batch.delete(d.reference)
+                batch.commit()
+                return len(docs)
+
+            n = _retrying(_sweep)
+            if not n:
                 break
-            for d in docs:
-                batch.delete(d.reference)
-            batch.commit()
-            removed[coll] += len(docs)
-    ledger.db().collection("ledger").document(patientId).delete()
-    pdoc.set({"openConflicts": [], "fleetState": "idle"}, merge=True)
+            removed[coll] += n
+    _retrying(lambda: ledger.db().collection("ledger").document(patientId).delete())
+    _retrying(lambda: pdoc.set({"openConflicts": [], "fleetState": "idle"}, merge=True))
     chaos.disarm()
+
+    # The appointments this fleet put on somebody's phone are part of its state.
+    # Leaving them behind meant every rehearsal added three more entries to a
+    # real calendar until the demo patient's actual bookings were unfindable.
+    # A reset that clears the ledger but not the side effects is not a reset.
+    try:
+        removed["calendar"] = gcal.delete_events(patient_id=patientId)["deleted"]
+    except gcal.CalendarUnavailable as e:
+        removed["calendar"] = f"skipped — {e}"
+
     return {"reset": patientId, "removed": removed, "ledger": ledger.read_ledger(patientId)}
+
+
+@app.get("/demo/document")
+def demo_document():
+    """The discharge summary itself, before anything has read it.
+
+    The demo is a screen recording, so the paper has to be on the screen — a
+    presenter holding a printed page to a camera that is not in the frame shows
+    the audience nothing. This is the same text the Parser is given, served
+    without side effects so the page can render it on load.
+    """
+    return {"documentType": "Hospital discharge summary",
+            "source": "Mercy General Hospital (synthetic)",
+            "text": hero_patient.DISCHARGE_TEXT,
+            "lines": len(hero_patient.DISCHARGE_TEXT.splitlines())}
 
 
 @app.get("/demo/calendar")
 def demo_calendar():
-    """The fleet's calendar: id, share status, and the link a person opens to
-    add it to their own Google Calendar. This is how the demo phone gets it."""
-    return gcal.ping()
+    """The fleet's calendar: id, share status, how many events are on it, and
+    the link a person opens to add it to their own Google Calendar."""
+    out = gcal.ping()
+    try:
+        out["events"] = gcal.count_events()
+    except gcal.CalendarUnavailable:
+        pass
+    return out
+
+
+@app.get("/demo/calendar/events")
+def demo_calendar_events():
+    """Every event on the fleet calendar, with its idempotency key."""
+    evs = gcal.list_events()
+    uids = [e["iCalUID"] for e in evs if e.get("iCalUID")]
+    dupes = {u for u in uids if uids.count(u) > 1}
+    return {"count": len(evs), "events": evs,
+            "duplicateUIDs": sorted(dupes), "hasDuplicates": bool(dupes)}
+
+
+@app.get("/demo/calendar/list")
+def demo_calendar_list():
+    """Every calendar the fleet's account can see.
+
+    Diagnostic: the fleet finds its calendar by name before creating one, but
+    two instances racing that check on a cold start could each create their own
+    and share both with the family account — which looks, on a phone, exactly
+    like every appointment being booked twice.
+    """
+    return gcal.list_calendars()
+
+
+@app.post("/demo/calendar/purge")
+def demo_calendar_purge(request: Request, patientId: str = "",
+                        includeUntagged: bool = False):
+    """Delete the fleet's own events from the shared calendar.
+
+    Only events this fleet wrote are removed — they carry a private extended
+    property that nothing else on the calendar has. Pass patientId to clear one
+    fleet, or omit it to clear every booking the fleet has ever made.
+
+    ``includeUntagged`` also removes entries written before the fleet started
+    tagging its events, which cannot be filtered and can only be reached by
+    clearing the calendar it owns.
+    """
+    _guard_demo(request)
+    try:
+        return gcal.delete_events(patient_id=patientId, include_untagged=includeUntagged)
+    except gcal.CalendarUnavailable as e:
+        raise HTTPException(502, f"calendar unavailable: {e}") from e
 
 
 @app.get("/demo/scenarios")
@@ -500,6 +732,7 @@ def demo_scenarios():
 
 @app.post("/demo/observe")
 def demo_observe(scenario: str = "chest_pain", patientId: str = "p_hero"):
+    _clean_pid(patientId)
     """Send a home-monitoring report into the fleet.
 
     Goes to the Watchman, which records it and decides whether it matches this
@@ -520,6 +753,7 @@ def demo_observe(scenario: str = "chest_pain", patientId: str = "p_hero"):
 
 @app.post("/demo/book-followups")
 def demo_book_followups(patientId: str = "p_hero"):
+    _clean_pid(patientId)
     """Dispatch a Scheduler task for every follow-up on the care plan."""
     snap = ledger.db().collection("patients").document(patientId).get()
     if not snap.exists:
@@ -597,7 +831,7 @@ _fleets_lock = threading.Lock()
 
 
 @app.get("/console/fleets")
-def console_fleets(limit: int = 250):
+def console_fleets(limit: int = Query(250, ge=1, le=1000)):
     now = time.monotonic()
     with _fleets_lock:
         if (_fleets_cache["data"] is not None

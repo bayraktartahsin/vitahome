@@ -32,6 +32,14 @@ All seven are live and published as A2A agent cards at [`/registry`](https://vit
 
 ## Architecture
 
+![VitaHome architecture](docs/architecture-diagram.png)
+
+*Generated from source — `python3 scripts/make_diagram.py` rebuilds it. Every box
+is sized from its own text as measured, and the generator refuses to write a
+diagram in which any label has escaped its box.*
+
+The same thing in text, for anyone reading this in a terminal:
+
 ```
  photo ─▶ [gateway]  FastAPI + ADK · Parser runs synchronously (~1s)
           │          fan-out ──▶ Pub/Sub "fleet-work"

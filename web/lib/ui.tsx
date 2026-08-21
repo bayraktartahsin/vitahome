@@ -107,6 +107,7 @@ export function Btn({
   busy = false,
   disabled = false,
   title,
+  auto,
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -115,6 +116,8 @@ export function Btn({
   busy?: boolean;
   disabled?: boolean;
   title?: string;
+  /** Stable hook the Director's autopilot clicks during a recording. */
+  auto?: string;
 }) {
   const base =
     "inline-flex items-center gap-2 whitespace-nowrap px-3.5 py-2 text-[13px] font-medium transition active:translate-y-px disabled:cursor-default disabled:opacity-45";
@@ -141,6 +144,7 @@ export function Btn({
       onClick={onClick}
       disabled={disabled || busy}
       title={title}
+      data-auto={auto}
       className={`${base} ${styles[kind]}`}
     >
       {busy && <span className="vh-spin" aria-hidden />}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { API } from "@/lib/api";
 import { TopBar } from "@/lib/ui";
@@ -49,6 +49,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 export default function Capture() {
   const [parsed, setParsed] = useState<Parsed | null>(null);
+  const [doc, setDoc] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +79,17 @@ export default function Capture() {
       setBusy(false);
     }
   }
+
+  // The demo is a screen recording, so the paper has to be on the screen. A
+  // presenter holding a printed page up to a camera that is not in the frame
+  // shows the audience nothing — and the whole opening depends on the audience
+  // trying, and failing, to find the fatal line themselves.
+  useEffect(() => {
+    fetch(`${API}/demo/document`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.text && setDoc(d.text))
+      .catch(() => {});
+  }, []);
 
   const useSample = () =>
     send(() =>
@@ -116,12 +128,14 @@ export default function Capture() {
         {!parsed && !busy && (
           <>
             <h1 className="font-display text-3xl font-semibold leading-tight text-fam-ink">
-              Photograph the discharge papers.
+              This is what he was sent home with.
             </h1>
             <p className="mt-3 max-w-xl leading-relaxed text-fam-ink2">
-              No typing, no forms. Every instruction on the page comes back with the
-              one that matters most at the top — not the one that was printed first.
+              Twelve instructions. One of them kills him if it is missed. It is not
+              the first one, and nothing on the page tells you which it is.
             </p>
+
+            {doc && <Sheet text={doc} />}
 
             <div className="mt-8 flex flex-wrap gap-3">
               <button
@@ -132,6 +146,7 @@ export default function Capture() {
               </button>
               <button
                 onClick={useSample}
+                data-auto="sample"
                 className="rounded-fam border border-fam-line bg-fam-surface px-5 py-3 text-sm font-medium text-fam-ink transition hover:bg-fam-surface2"
               >
                 Use the sample discharge summary
@@ -287,5 +302,48 @@ function Card({ ins, exact }: { ins: Instruction; exact: boolean }) {
         </span>
       </div>
     </li>
+  );
+}
+
+/**
+ * The discharge summary, drawn as the printed page it is.
+ *
+ * The opening of the demo asks the audience to find the fatal line themselves
+ * and fail. That only works if they can see the document — so it is rendered
+ * here rather than held up to a camera, which a screen recording cannot show.
+ *
+ * Deliberately undecorated: no highlighting, no ranking, no colour. Every
+ * instruction has to look exactly as unremarkable as every other one, because
+ * that sameness is the problem the product exists to solve. The re-ranked list
+ * that appears a moment later is only persuasive if this came first.
+ */
+function Sheet({ text }: { text: string }) {
+  const lines = text.split("\n");
+  return (
+    <figure className="mt-8 mb-2">
+      <div className="overflow-hidden rounded-fam border border-fam-line bg-white shadow-sheet">
+        <div className="border-b border-fam-line/70 bg-[#FBFAF7] px-5 py-2">
+          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#8A8578]">
+            Mercy General Hospital · page 1 of 1
+          </span>
+        </div>
+        <div className="max-h-[40rem] overflow-y-auto px-5 py-4">
+          <pre className="whitespace-pre-wrap font-mono text-[12px] leading-[1.55] text-[#2B2A26]">
+            {lines.map((l, i) => (
+              <span key={i} className="flex gap-3">
+                <span className="w-6 shrink-0 select-none text-right text-[#C3BEB1]">
+                  {i + 1}
+                </span>
+                <span className="flex-1">{l || " "}</span>
+              </span>
+            ))}
+          </pre>
+        </div>
+      </div>
+      <figcaption className="mt-2 font-mono text-[11px] text-fam-ink2">
+        {lines.length} lines. Nothing on this page is emphasised, because nothing on
+        the real one is either.
+      </figcaption>
+    </figure>
   );
 }

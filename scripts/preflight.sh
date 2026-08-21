@@ -124,6 +124,18 @@ ARMED=$(curl -s --max-time 20 "$G/chaos/status" 2>/dev/null \
 [ -z "$ARMED" ] && ok "chaos disarmed" \
                 || bad "chaos still ARMED for '$ARMED' — curl -XPOST $G/chaos/disarm"
 
+# The shared calendar is on camera. Rehearsals leave real appointments behind,
+# and a phone showing thirty entries makes the three that matter unfindable.
+CAL=$(curl -s --max-time 25 "$G/demo/calendar" 2>/dev/null \
+      | python3 -c "import sys,json;print(json.load(sys.stdin).get('events','?'))" 2>/dev/null)
+if [ "$CAL" = "0" ] || [ "$CAL" = "3" ] || [ "$CAL" = "4" ]; then
+  ok "calendar has $CAL event(s) — clean"
+elif [ "$CAL" = "?" ] || [ -z "$CAL" ]; then
+  warn "could not read the calendar event count"
+else
+  warn "calendar holds $CAL events — clear it: curl -XPOST '$G/demo/calendar/purge?includeUntagged=true'"
+fi
+
 curl -s --max-time 60 -X POST "$G/demo/seed" 2>/dev/null | python3 -c "
 import sys,json
 d=json.load(sys.stdin)
@@ -166,6 +178,17 @@ hd "local"
     printf "  \033[31m✗\033[0m tests failing — run: cd backend && .venv/bin/python -m pytest\n"
   fi
 )
+
+hd "the take"
+# The four-minute rule is a scoring rule, so the script's running time is
+# checked here like any other precondition — a 4:05 cut of a perfect demo
+# throws away the ending.
+if OUT=$(node "$(dirname "$0")/time-script.mjs" 2>&1); then
+  printf "  \033[32m✓\033[0m %s\n" "$(echo "$OUT" | grep 'running time' | sed 's/^ *//')"
+  printf "  \033[32m✓\033[0m %s\n" "$(echo "$OUT" | grep PASS | sed 's/^ *//')"
+else
+  printf "  \033[31m✗\033[0m demo script over four minutes or rushed — run: node scripts/time-script.mjs\n"
+fi
 
 # ---------------------------------------------------------------- verdict ---
 sync

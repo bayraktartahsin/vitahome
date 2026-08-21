@@ -81,6 +81,38 @@ def test_ties_break_on_confidence_so_the_surest_critical_leads(parsed):
     assert [i["text"] for i in out["instructions"]] == ["more sure", "less sure"]
 
 
+def test_a_do_not_stop_warning_outranks_an_equally_critical_prescription(parsed):
+    """A discharge summary carries several equally critical lines. Deciding the
+    top of that list by whichever the model happened to score highest is not an
+    ordering — it is a coin toss with a different answer each run.
+
+    Among equals, the instruction the patient can violate silently, feeling
+    well, weeks later, leads: stopping an antiplatelet after a stent is a
+    different kind of error from forgetting a dose of the same drug.
+    """
+    out = parsed([
+        _ins(lineNo=6, text="Aspirin 81 mg daily — indefinite",
+             criticality="CRITICAL", confidence=0.99),
+        _ins(lineNo=7, text="Ticagrelor 90 mg twice daily — DO NOT STOP without "
+                            "speaking to your cardiologist",
+             criticality="CRITICAL", confidence=0.90),
+    ])
+    assert out["instructions"][0]["lineNo"] == 7
+
+
+def test_a_watch_for_list_ranks_below_the_medications_it_accompanies(parsed):
+    """Red flags are conditional — what to do *if* something happens — and the
+    Watchman is already carrying them. They belong under the instructions the
+    patient has to act on today."""
+    out = parsed([
+        _ins(lineNo=26, text="Call 911 for chest pain or bleeding",
+             criticality="CRITICAL", type="red_flag", confidence=0.99),
+        _ins(lineNo=6, text="Aspirin 81 mg daily", criticality="CRITICAL",
+             type="medication", confidence=0.80),
+    ])
+    assert [i["lineNo"] for i in out["instructions"]] == [6, 26]
+
+
 def test_ids_are_assigned_after_ranking(parsed):
     """i_01 must be the most consequential instruction, not the topmost line —
     downstream agents and the UI both address instructions by id."""

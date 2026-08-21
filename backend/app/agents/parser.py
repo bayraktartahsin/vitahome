@@ -123,6 +123,13 @@ Fields:
 - why: for CRITICAL only. One plain sentence a frightened family member would
   understand, saying what actually happens. No jargon, no hedging.
 
+  It must be specific to THIS line. Two instructions on the same page must not
+  come back with the same sentence: name the drug or the act, and say what goes
+  wrong for that one in particular. A rationale that could be pasted under any
+  other instruction tells the reader nothing, and reads as boilerplate rather
+  than as something that was worked out — which is worse than saying nothing,
+  because the whole claim here is that this was reasoned about per line.
+
 - confidence: 0-1, how sure you are that you READ THIS CORRECTLY — not how sure
   you are of the medicine. Clean typed text you can read without effort is
   0.95-0.99. Reserve 1.0 for nothing. Use 0.7-0.9 if the wording is loose or you
@@ -156,12 +163,42 @@ def _number_lines(text: str) -> str:
     return "\n".join(f"{n:>3} | {line}" for n, line in enumerate(text.splitlines(), 1))
 
 
-def _rank(ins: dict[str, Any]) -> tuple[int, float]:
-    """Consequence first, then confidence. This is the re-ranking, and it is
-    deliberately not the model's job — ordering must be deterministic and
-    inspectable, not a thing the model felt like doing that run."""
+# Phrases that mark an instruction whose failure mode is something the patient
+# does, silently, believing they are fine — the class of error this product
+# exists for. Deliberately the wording discharge summaries actually use.
+_IRREVERSIBLE = (
+    "do not stop", "don't stop", "do not discontinue", "never stop",
+    "do not miss", "must not stop", "without speaking to", "without talking to",
+    "without consulting", "do not skip",
+)
+
+
+def _rank(ins: dict[str, Any]) -> tuple[int, int, float]:
+    """Consequence first, then irreversibility, then confidence.
+
+    The re-ranking is deliberately not the model's job — ordering must be
+    deterministic and inspectable, not a thing the model felt like doing that
+    run. Confidence alone was not enough to make it so: a discharge summary
+    carries several equally critical lines, and which one the model happened to
+    score highest decided the top of the list.
+
+    So within a criticality band, an instruction that warns against stopping a
+    therapy outranks one that merely prescribes it. Both matter; only one has a
+    failure mode the patient walks into on their own, feeling well, a month
+    after they stop reading the page. A conditional watch-for list ranks last of
+    the three — it describes what to do if something happens, and the Watchman
+    is already carrying it.
+    """
     order = {"CRITICAL": 0, "caution": 1, "none": 2}
-    return (order.get(ins.get("criticality", "none"), 2), -float(ins.get("confidence", 0)))
+    text = (ins.get("text") or "").lower()
+    if any(p in text for p in _IRREVERSIBLE):
+        weight = 0
+    elif ins.get("type") == "red_flag":
+        weight = 2
+    else:
+        weight = 1
+    return (order.get(ins.get("criticality", "none"), 2), weight,
+            -float(ins.get("confidence", 0)))
 
 
 def parse(pid: str, *, text: str | None = None, image: bytes | None = None,

@@ -18,8 +18,12 @@ FLEET_VERSION = "0.1.0"
 
 # name -> (glyph, verb, one-line duty, model, iam scope, instruction)
 _SPEC: dict[str, tuple[str, str, str, str, str, str]] = {
+    # The model on each card is the model the agent actually calls. An A2A card
+    # is a contract a reviewer can check against /capture's reported model — two
+    # of these used to disagree with the code, which is worse than not
+    # publishing the field at all. tests/test_fleet_contracts.py holds the line.
     "parser": ("📄", "reads", "Turns a photographed medical document into a structured plan and ranks each instruction by how dangerous it is to miss.",
-               settings.model_reason, "healthcare.fhirResources.create",
+               settings.model_fast, "healthcare.fhirResources.create",
                "You read medical instruction documents. Extract every instruction verbatim with its line number. "
                "Rank criticality: CRITICAL means a patient could die if this is missed. Never invent an instruction. "
                "If a line is ambiguous or illegible, mark low confidence — do not guess."),
@@ -35,7 +39,7 @@ _SPEC: dict[str, tuple[str, str, str, str, str, str]] = {
                    settings.model_fast, "healthcare.fhirResources.update",
                    "You route prescriptions and construct dose schedules. You never alter a dose."),
     "watchman": ("👁", "watches", "Monitors for the red-flag symptoms named in THIS document, 24/7.",
-                 settings.model_fast, "healthcare.fhirResources.create",
+                 settings.model_reason, "healthcare.fhirResources.create",
                  "You watch incoming observations against this document's specific red-flag list. "
                  "You do not diagnose. You match and you raise."),
     "coach": ("🗣", "checks in", "Runs adaptive daily check-ins by voice and feeds answers back to the fleet.",

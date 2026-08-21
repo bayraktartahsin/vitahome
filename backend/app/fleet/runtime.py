@@ -115,6 +115,20 @@ def run_task(agent: str, pid: str, task_id: str, body: AgentBody) -> dict[str, A
                      task_id, {"duplicateDelivery": True})
         return {"status": f"already_{status}", "attempt": settled.get("attempt")}
 
+    # The task may be gone rather than finished: an operator reset the demo
+    # fleet while its messages were still in flight, so the documents were
+    # deleted underneath them. There is nothing to run and nothing to recover —
+    # but raising here returns a 500, which Pub/Sub reads as "try again", and
+    # the message comes back for as long as the subscription will carry it.
+    #
+    # A deleted task is a settled task. Ack it and say so, rather than retrying
+    # against a record that will never exist again.
+    if settled is None:
+        ledger.audit(pid, "skip", agent,
+                     "task no longer exists — deleted before this delivery arrived, acked",
+                     task_id, {"orphanedDelivery": True})
+        return {"status": "gone", "note": "task deleted before delivery"}
+
     task = ledger.claim(pid, task_id, WORKER_ID)
     attempt = task.get("attempt", 1)
     log.info("agent=%s pid=%s task=%s attempt=%s worker=%s",

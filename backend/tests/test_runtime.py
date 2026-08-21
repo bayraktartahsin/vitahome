@@ -23,7 +23,10 @@ class _Ledger:
     SETTLED = {"done", "refused", "escalated", "resolved"}
 
     def peek(self, pid, task_id):
-        return None                      # not yet started, unless overridden
+        # A queued task has a document — it is simply not settled yet. peek()
+        # returning None means the document does not exist, which is a
+        # different thing entirely and is tested separately below.
+        return {"status": "queued", "attempt": self.attempt - 1}
 
     def audit(self, pid, kind, actor, detail, task_id=None, extra=None):
         pass
@@ -188,3 +191,31 @@ def test_an_unstarted_task_is_still_claimed_normally(monkeypatch):
     monkeypatch.setattr(runtime, "ledger", led)
     runtime.run_task("scheduler", "p", "t", lambda *_: "booked")
     assert led.claimed
+
+
+def test_a_delivery_for_a_deleted_task_is_acked_not_retried(monkeypatch):
+    """Resetting the demo deletes task documents while their messages are still
+    in flight, so a worker can be handed a task that no longer exists.
+
+    Raising there returns a 500, Pub/Sub reads that as "try again", and the
+    message comes back for as long as the subscription will carry it — a poison
+    storm created by an operator pressing reset at the normal moment. A deleted
+    task is a settled task: there is nothing to run and nothing to recover.
+    """
+    from app.fleet import runtime
+
+    audited: list[tuple] = []
+    monkeypatch.setattr(runtime.ledger, "peek", lambda pid, tid: None)
+    monkeypatch.setattr(runtime.ledger, "audit",
+                        lambda *a, **k: audited.append(a))
+
+    def _must_not_claim(*a, **k):
+        raise AssertionError("claim() must not run for a task that is gone")
+
+    monkeypatch.setattr(runtime.ledger, "claim", _must_not_claim)
+
+    out = runtime.run_task("scheduler", "p_hero", "t_missing", lambda *a: "never")
+
+    assert out["status"] == "gone"
+    assert audited, "the orphaned delivery should leave a trace in the audit"
+    assert "no longer exists" in audited[0][3]

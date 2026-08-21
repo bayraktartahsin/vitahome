@@ -1,5 +1,6 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { StageLink } from "@/lib/stagelink";
 
 export const metadata: Metadata = {
   title: "VitaHome — the hospital saves your life, then hands you a piece of paper",
@@ -18,7 +19,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
+      <body className="font-sans antialiased">
+        <StageLink />
+        {children}
+      </body>
     </html>
   );
 }

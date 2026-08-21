@@ -123,3 +123,33 @@ def test_an_untargeted_arm_still_fires_on_the_first_step(monkeypatch):
     monkeypatch.setattr(chaos.os, "_exit", lambda code: killed.setdefault("code", code))
     chaos.consume_if_armed("scheduler", "p", "t", "resolve_provider")
     assert killed["code"] == 1
+
+
+def test_every_agent_card_names_the_model_that_agent_actually_calls():
+    """An A2A card is a contract a reviewer can check.
+
+    /capture reports the model it just used, and /registry publishes one per
+    agent — so the two being different is not a cosmetic slip, it is the
+    published contract disagreeing with the running code. Two cards did drift
+    this way (the Parser claimed the reasoning model while calling the fast one;
+    the Watchman the reverse), which is why this reads the source rather than
+    trusting the table.
+    """
+    import re
+    from pathlib import Path
+
+    from app.config import settings
+
+    agents_dir = Path(__file__).resolve().parent.parent / "app" / "agents"
+    tier = {settings.model_fast: "fast", settings.model_reason: "reason"}
+
+    for name, card in ((n, registry.agent_card(n)) for n in registry._SPEC):
+        src = (agents_dir / f"{name}.py").read_text()
+        used = set(re.findall(r"model=settings\.model_(fast|reason)", src))
+        if not used:
+            continue          # deterministic agent — nothing to disagree about
+        assert len(used) == 1, f"{name} calls more than one model tier: {used}"
+        assert tier[card["model"]] == used.pop(), (
+            f"{name}'s agent card advertises {card['model']}, "
+            f"which is not the model {name}.py calls"
+        )
