@@ -883,6 +883,57 @@ def _compute_fleets(limit: int):
     }
 
 
+@app.post("/demo/rehydrate")
+def demo_rehydrate(request: Request):
+    """Put the demo back the way a first visitor should find it.
+
+    Judging runs for three weeks and the chaos panel is deliberately open, so
+    every reviewer leaves the fleet a little more used than they found it:
+    counters climbed, exception cards stacked up, appointments accumulated, and
+    an agent possibly still armed by someone who did not press disarm. The
+    fifth judge should not inherit the first four.
+
+    Scheduled nightly. Everything it calls is idempotent, so running it while
+    somebody is mid-click costs them one reset, not a broken fleet.
+    """
+    _guard_demo(request)
+    out: dict[str, Any] = {}
+
+    chaos.disarm()
+    out["chaos"] = "disarmed"
+
+    pdoc = ledger.db().collection("patients").document(hero_patient.HERO_ID)
+    removed = {"tasks": 0, "audit": 0}
+    for coll in ("tasks", "audit"):
+        while True:
+            def _sweep() -> int:
+                batch = ledger.db().batch()
+                docs = list(pdoc.collection(coll).limit(400).stream())
+                if not docs:
+                    return 0
+                for d in docs:
+                    batch.delete(d.reference)
+                batch.commit()
+                return len(docs)
+            n = _retrying(_sweep)
+            if not n:
+                break
+            removed[coll] += n
+    _retrying(lambda: ledger.db().collection("ledger")
+              .document(hero_patient.HERO_ID).delete())
+    _retrying(lambda: pdoc.set({"openConflicts": [], "fleetState": "idle"}, merge=True))
+    out["cleared"] = removed
+
+    try:
+        out["calendar"] = gcal.delete_events(include_untagged=True)["deleted"]
+    except gcal.CalendarUnavailable as e:
+        out["calendar"] = f"skipped — {e}"
+
+    out["seeded"] = hero_patient.seed().get("instructions")
+    log.info("demo rehydrated: %s", out)
+    return out
+
+
 @app.post("/demo/cohort")
 def demo_cohort(request: Request, count: int = 200):
     _guard_demo(request)
