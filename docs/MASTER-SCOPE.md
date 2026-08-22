@@ -2,7 +2,7 @@
 
 > *The hospital saves your life, then hands you a piece of paper. We take it from there.*
 
-**Product:** Homeward — by Graviti Labs, from the makers of Vita
+**Product:** Homeward — by Vitamedas Inc., from the makers of Vita
 **Event:** All Things Agentic Hackathon (Google) · Track: **Fortified Enterprise Fleet** · also entering **Startup Excellence**
 **Deadline:** Aug 31, 2026 5:00 PM PDT · submit **Aug 30** · 15 days from Aug 16
 **Spoken positioning line:** *"the last mile of healthcare — the part nobody executes"*
@@ -38,7 +38,7 @@ An agent fleet that **executes medical instructions**. Photograph a discharge su
 
 **VitaHome.** *(Decided. Overrules this section's earlier recommendation of "Homeward", which is retained below as the reasoning that was weighed and rejected.)*
 
-The Vita prefix is deliberate: Graviti Labs ships Vita, a live health product, and VitaHome is the aftercare arm of that family rather than a standalone hackathon artifact. A founder with a shipped product extending it is a stronger story than a founder with an unrelated new name — it converts the "is this a weekend project?" question into a roadmap answer. "The Last Mile" survives as the spoken architecture line.
+The Vita prefix is deliberate: Vitamedas Inc. ships Vita, a live health product, and VitaHome is the aftercare arm of that family rather than a standalone hackathon artifact. A founder with a shipped product extending it is a stronger story than a founder with an unrelated new name — it converts the "is this a weekend project?" question into a roadmap answer. "The Last Mile" survives as the spoken architecture line.
 
 The counter-argument, on the record: Vita-prefixed naming invites comparison with a prior entry by the same team. Mitigated by keeping the two products architecturally and narratively separate — different track, different thesis, no shared code. Alternatives considered: Homeward, Aftercare, Handoff.
 

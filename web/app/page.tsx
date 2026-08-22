@@ -20,7 +20,7 @@ export default function Home() {
 
       <div className="mx-auto max-w-3xl px-6 pb-20 pt-16 md:pt-24">
         <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-fam-ink2">
-          Graviti Labs — the Vita family
+          Vitamedas Inc. — the Vita family
         </p>
 
         <h1 className="mt-4 font-display text-[2.6rem] font-semibold leading-[1.08] text-fam-ink md:text-[3.4rem]">
@@ -107,7 +107,7 @@ export default function Home() {
           VitaHome never diagnoses and never prescribes. It executes instructions a
           licensed clinician already wrote, and hands every ambiguity to a person.
           All demo patients are synthetic. Built on Google Cloud by{" "}
-          <span className="text-fam-ink">Graviti Labs</span>, makers of Vita.
+          <span className="text-fam-ink">Vitamedas Inc.</span>, makers of Vita.
         </footer>
       </div>
     </main>

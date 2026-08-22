@@ -18,7 +18,7 @@ The hospital saves your life, then hands you a piece of paper. We take it from t
 **The Fortified Enterprise Fleet** — agent registry, async runtime, persistent
 memory, security and governance, compliance-aware data handling.
 
-Also entering **Startup Excellence** (Graviti Labs).
+Also entering **Startup Excellence** (Vitamedas Inc.).
 
 ---
 
@@ -241,9 +241,9 @@ instruction clips. Cloud Trace across the fan-out.
 
 ## Built by
 
-**Tahsin Bayraktar** — Graviti Labs · info@gravitilabs.com
+**Tahsin Bayraktar** — Vitamedas Inc.
 
-Graviti Labs builds **Vita**, a live health product. VitaHome is the aftercare
+Vitamedas Inc. builds **Vita**, a live health product. VitaHome is the aftercare
 arm of that family: the same conviction that the hard part of health is not
 knowing what to do, it is executing it on a normal Tuesday when you are tired
 and frightened.

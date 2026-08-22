@@ -397,7 +397,7 @@ y += 19
 text(PAD, y, "Gemma (PHI log audit) · ADK + A2A cards · Cloud Scheduler · Secret Manager",
      12, INK3, mono=True)
 y += 19
-text(PAD, y, "vitahome.vitamedas.com · Graviti Labs", 12, INK2, mono=True)
+text(PAD, y, "vitahome.vitamedas.com · Vitamedas Inc.", 12, INK2, mono=True)
 y += 22
 
 H = y

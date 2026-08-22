@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description:
     "An agent fleet that executes medical instructions. Photograph the papers they gave you; VitaHome reconciles the medications, books the follow-ups, watches for the warning signs, and calls a human when one appears.",
   applicationName: "VitaHome",
-  authors: [{ name: "Graviti Labs" }],
+  authors: [{ name: "Vitamedas Inc." }],
   openGraph: {
     title: "VitaHome",
     description:

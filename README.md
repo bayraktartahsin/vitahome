@@ -4,7 +4,7 @@
 
 An **agent fleet that executes medical instructions.** Photograph a discharge summary and the fleet reconciles the medications, books every follow-up, routes the prescriptions, arms monitoring for that document's specific red flags, checks in daily — and hands a licensed human every decision it should not make alone.
 
-Built for the **All Things Agentic Hackathon** · track: **The Fortified Enterprise Fleet** · by [Graviti Labs](https://vitamedas.com), makers of Vita.
+Built for the **All Things Agentic Hackathon** · track: **The Fortified Enterprise Fleet** · by [Vitamedas Inc.](https://vitamedas.com), makers of Vita.
 
 ---
 
@@ -182,11 +182,11 @@ Everything else touches a real Google Cloud service. FHIR Patients, Appointments
 
 ---
 
-© 2026 Graviti Labs
+© 2026 Vitamedas Inc.
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE). Copyright 2026 Graviti Labs.
+Apache 2.0 — see [LICENSE](LICENSE). Copyright 2026 Vitamedas Inc.
 
 Chosen so a reviewer can clone, run, and fork this without asking, and so the
 patent grant is explicit in both directions. A public repository with no licence

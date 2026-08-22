@@ -41,12 +41,14 @@ Every field is pre-written in `docs/SUBMISSION.md` — paste in order:
   agent-development-kit · cloud-scheduler · secret-manager`
 - **Links** → the Try-it table (live app, drill, fleets, architecture,
   registry, repo)
-- **Track** → The Fortified Enterprise Fleet. Also tick **Startup Excellence**
-  (Graviti Labs is incorporated).
+- **Track** → The Fortified Enterprise Fleet. Tick **Startup Excellence** only
+  if the entry is on behalf of **Vitamedas Inc.**, which is the incorporated
+  entity — the prize requires one, and a corporate email that matches it.
 - **Video** → your YouTube URL from step 2
 
-Use the publisher identity for any name/email fields: **Tahsin Bayraktar ·
-info@gravitilabs.com · Graviti Labs**.
+Name fields: **Tahsin Bayraktar**. Company / legal fields: **Vitamedas Inc.**
+— the incorporated entity, and the one the Startup Prize is claimed under. Its
+corporate email must be an address on that company's own domain.
 
 ## 4 · After submitting (5 min)
 

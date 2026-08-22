@@ -121,5 +121,5 @@
 <path d="M48 1348.0 H1592.0" stroke="#2A323D" stroke-width="1"/>
 <text x="48.0" y="1372.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#6C7684">Cloud Run · Pub/Sub · Firestore · Cloud Healthcare API (FHIR R4) · Google Calendar API · Gemini 3.5 Flash-Lite + 3.7 Flash · Gemini TTS</text>
 <text x="48.0" y="1391.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#6C7684">Gemma (PHI log audit) · ADK + A2A cards · Cloud Scheduler · Secret Manager</text>
-<text x="48.0" y="1410.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#98A2B0">vitahome.vitamedas.com · Graviti Labs</text>
+<text x="48.0" y="1410.0" font-family="Menlo, Consolas, monospace" font-size="12" fill="#98A2B0">vitahome.vitamedas.com · Vitamedas Inc.</text>
 </svg>

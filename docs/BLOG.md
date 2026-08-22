@@ -1,6 +1,6 @@
 # I built an agent fleet that refuses to do things
 
-*Tahsin Bayraktar · Graviti Labs*
+*Tahsin Bayraktar · Vitamedas Inc.*
 
 ---
 
