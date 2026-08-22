@@ -183,3 +183,12 @@ Everything else touches a real Google Cloud service. FHIR Patients, Appointments
 ---
 
 © 2026 Graviti Labs
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE). Copyright 2026 Graviti Labs.
+
+Chosen so a reviewer can clone, run, and fork this without asking, and so the
+patent grant is explicit in both directions. A public repository with no licence
+at all is all-rights-reserved by default, which is the opposite of what a
+hackathon submission wants to say.
