@@ -76,7 +76,9 @@ export const SCRIPT: Step[] = [
     note: "say nothing until the list stops appearing",
     ms: 4500,
   },
-  { say: "Three seconds.", note: "read the real number on screen, top right", ms: 1700 },
+  { say: "Three seconds.",
+    note: "READ THE REAL NUMBER. the screen shows two: say the end-to-end one, which is the one the counter was climbing to.",
+    ms: 1700 },
   {
     say: "Top of the list, in red: do not stop ticagrelor. Stopping a blood thinner early after a stent is how people die feeling fine.",
     ms: 10100,

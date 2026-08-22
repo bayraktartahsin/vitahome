@@ -52,6 +52,12 @@ export default function Capture() {
   const [doc, setDoc] = useState<string>("");
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  /* The wall clock the person actually watched, kept after the parse lands.
+     The counter during the wait measures the whole round trip; the model's own
+     latency is a smaller number, and showing only the latter meant the figure
+     on screen contradicted the one a presenter had just read aloud off the
+     counter. Both are true — so both are shown, each labelled. */
+  const [observed, setObserved] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -76,6 +82,7 @@ export default function Capture() {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       clearInterval(tick);
+      setObserved(performance.now() - t0);
       setBusy(false);
     }
   }
@@ -195,7 +202,7 @@ export default function Capture() {
                 {parsed.counts.total} instructions, hardest first
               </h1>
               <span className="font-mono text-[11px] text-fam-ink2">
-                {(parsed.latencyMs / 1000).toFixed(2)}s · {parsed.model}
+                {(observed / 1000).toFixed(2)}s end to end · {(parsed.latencyMs / 1000).toFixed(2)}s in {parsed.model}
               </span>
             </div>
             <p className="mt-2 text-[13px] text-fam-ink2">

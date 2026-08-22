@@ -174,7 +174,7 @@ There are 29 steps and the whole run is 3:52. Window B shows you each one, so yo
 
 **6.** (0:32) Say:  
    **"Three seconds."**  
-   *read the real number on screen, top right*
+   *READ THE REAL NUMBER. the screen shows two: say the end-to-end one, which is the one the counter was climbing to.*
 
 **7.** (0:33) Say:  
    **"Top of the list, in red: do not stop ticagrelor. Stopping a blood thinner early after a stent is how people die feeling fine."**
