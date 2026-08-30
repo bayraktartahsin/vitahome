@@ -1,129 +1,134 @@
 # Social posts
 
-Pick one per platform. Each stands alone — don't post two variants of the same
-idea to the same audience.
+Every post below already includes the hashtag and fits X's 280-character
+limit **with it**. Copy a whole block, hashtag included — nothing to trim.
 
-Post the **thread** on X and the **LinkedIn** one on LinkedIn. The short
-alternates are there if the main one doesn't feel right on the day.
+Lengths are asserted by the check at the bottom of this file, so an edit that
+pushes one over the limit is caught rather than discovered when X refuses it.
 
 ---
 
 ## X / Twitter — thread (recommended)
 
-**1/**
-My family got handed a discharge summary while I was in another country.
+Post 1, then reply to your own post with 2, and so on.
 
-12 instructions. One of them was "do not stop ticagrelor without speaking to
-cardiology."
+**Post 1 of 7** — 276/280 characters
 
-It was seventh on the page, in the same font as "no lifting over 10 lbs."
+```
+1/ My family was handed a discharge summary while I was abroad.
 
-I read it three times before I found it.
+12 instructions. One said: do not stop ticagrelor without speaking to cardiology.
 
-**2/**
-The medicine was right. Somebody wrote it down correctly.
+It was 7th on the page, same font as "no lifting over 10 lbs."
 
-Then execution — book the follow-up, reconcile the meds, notice the warning
-signs — became the job of whoever was standing in the corridor.
+I read it 3 times before I found it.
 
-So I built seven agents to carry the page out.
+#AllThingsAgenticHackathon
+```
 
-**3/**
-Photograph the summary → every instruction comes back re-ranked by what happens
-if you miss it.
+**Post 2 of 7** — 273/280 characters
 
-Not by where it was printed. By consequence.
+```
+2/ The medicine was right. Someone wrote it down correctly.
 
-~3 seconds.
+Then carrying it out — book the follow-ups, reconcile the meds, watch for the warning signs — became the job of whoever was standing in the corridor.
 
-**4/**
-The part I didn't expect to matter most: every agent on the bus can refuse.
+I built 7 agents to do that part.
 
-The document says "STOP amlodipine." Three lines later it says "resume home
-medications as previously prescribed."
+#AllThingsAgenticHackathon
+```
+
+**Post 3 of 7** — 273/280 characters
+
+```
+3/ Photograph the page. Every instruction comes back re-ranked by what happens if you miss it, not by where it was printed.
+
+3 seconds, Gemini 3.5 Flash-Lite.
+
+The fatal line goes first, with a sentence explaining why that isn't on the document.
+
+#AllThingsAgenticHackathon
+```
+
+**Post 4 of 7** — 274/280 characters
+
+```
+4/ The part I didn't expect to matter most: the agents can refuse.
+
+The page says STOP amlodipine. Three lines later: resume home medications as previously prescribed.
 
 Amlodipine is a home medication.
 
-**5/**
-Both sentences are on the page. Neither is a typo. That pairing is one of the
-most common defects in real discharge paperwork.
+Both sentences are real. Neither is a typo.
 
-The Reconciler applies the 4 changes nobody disputes, then stops. It doesn't
-pick the likelier reading. It hands a clinician both, with the line each came
-from.
+#AllThingsAgenticHackathon
+```
 
-**6/**
-Then something I didn't build:
+**Post 5 of 7** — 269/280 characters
 
-→ Reconciler refuses: stop amlodipine or resume it?
-→ Pharmacist schedules 4 drugs, HOLDS the fifth
-→ Coach asks "what was your most recent blood pressure reading?" — because
-that's the data a clinician needs to settle it
+```
+5/ It doesn't pick the likelier reading.
 
-Nobody wired that.
+It applies the 4 changes nobody disputes, stops, and hands a clinician both readings with the line each came from.
 
-**7/**
-There's a panel that kills a worker mid-task. Real os._exit(1), no cleanup.
+Then the refusal travels — the Pharmacist holds that drug instead of scheduling it.
 
-Pub/Sub redelivers, Cloud Run gives a fresh container, the ledger skips the
-steps that already ran.
+#AllThingsAgenticHackathon
+```
 
-One appointment. Not two.
+**Post 6 of 7** — 272/280 characters
 
-At-least-once + idempotent steps = effectively-once. There's no exactly-once and
-I won't claim there is.
+```
+6/ Then I tried to break it.
 
-**8/**
-Every interesting bug was an agent doing something reasonable in isolation that
-was wrong in context.
+A panel kills a real worker process mid-write, no cleanup.
 
-The fix was never a better prompt. It was always making the code, not the model,
-hold the line.
+Pub/Sub redelivers, Cloud Run gives a fresh container, and the finished step says SKIP.
 
-**9/**
-My favourite: the Escalator can decide a human ISN'T needed.
+One appointment in the record. One event on the phone. Never two.
 
-First version matched textbook words — "syncope", "fainting".
+#AllThingsAgenticHackathon
+```
 
-"He fainted in the kitchen" contains neither.
+**Post 7 of 7** — 236/280 characters
 
-**10/**
-Worse: families rule things out constantly.
+```
+7/ Everyone is optimising for how much their agents do alone.
 
-"No chest pain, no dizziness, no shortness of breath" is how someone describes
-something REASSURING.
+In medicine that's the wrong axis. The question is how precisely a system knows where its authority ends.
 
-Naive matching reads that as three positive findings. It would have escalated
-live on camera, in the exact demo built to show restraint.
+Live, no login: vitahome.vitamedas.com
 
-**11/**
-Everyone's optimising for how much their agents do alone.
-
-In medicine that's the wrong axis.
-
-The number I put on screen next to "done autonomously" is **refused**.
-
-**12/**
-Live, kill an agent yourself:
-https://vitahome-web-205100594497.us-central1.run.app/console/drill
-
-Source: https://github.com/bayraktartahsin/vitahome
-
-Cloud Run · Pub/Sub · Firestore · Cloud Healthcare API · Gemini · Gemma
-All patients synthetic.
+#AllThingsAgenticHackathon
+```
 
 ---
 
-## X / Twitter — single post (alternate)
+## X / Twitter — one post, if you would rather not thread
 
-The hospital saves your life, then hands you a piece of paper.
+**Option 1** — 270/280 characters
 
-I built 7 agents that carry it out — and 4 of them can refuse.
+```
+A discharge summary has 12 instructions. One kills him if it's missed — 7th on the page, same font as "no lifting over 10 lbs."
 
-When a discharge summary says both "STOP amlodipine" and "resume home
-medications," it doesn't guess. It hands a clinician both readings.
+I built 7 agents that carry the page out, and refuse the parts a clinician should decide.
 
-Kill one live: [link]
+vitahome.vitamedas.com
+
+#AllThingsAgenticHackathon
+```
+
+**Option 2** — 263/280 characters
+
+```
+Most agent demos optimise for how much the agent does alone.
+
+Mine refuses. When a discharge summary says both STOP amlodipine and resume home medications, it hands a clinician both readings instead of guessing.
+
+vitahome.vitamedas.com
+
+#AllThingsAgenticHackathon
+```
 
 ---
 
