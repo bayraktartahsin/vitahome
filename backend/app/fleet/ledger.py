@@ -390,6 +390,48 @@ def bump_ledger(pid: str, field: LedgerField, by: int = 1) -> None:
     )
 
 
+# --------------------------------------------------------------- presence --
+#
+# The console polls every few seconds while a tab is open, so traffic is a
+# reliable proxy for "somebody is still looking at this" — far more reliable
+# than a browser telling us it closed, which it often does not, and which would
+# let one visitor's departure wipe the session of another who is still working.
+#
+# Writing a timestamp on every poll would be a write every few seconds per open
+# tab, so each process records at most one per minute. The value only needs to
+# be accurate to the nearest minute for a ten-minute idle window to mean
+# anything.
+
+_ACTIVITY_DOC = ("demo", "activity")
+_last_write = 0.0
+_write_gap = 60.0
+
+
+def touch_activity() -> None:
+    """Record that someone is using the demo, cheaply."""
+    global _last_write
+    now = time.time()
+    if now - _last_write < _write_gap:
+        return
+    _last_write = now
+    try:
+        db().collection(_ACTIVITY_DOC[0]).document(_ACTIVITY_DOC[1]).set(
+            {"lastSeenAt": datetime.now(timezone.utc)}, merge=True)
+    except Exception:                                   # noqa: BLE001
+        pass          # presence is a convenience; never fail a request for it
+
+
+def idle_seconds() -> float | None:
+    """How long since anyone touched the demo. None if never recorded."""
+    snap = db().collection(_ACTIVITY_DOC[0]).document(_ACTIVITY_DOC[1]).get()
+    if not snap.exists:
+        return None
+    seen = (snap.to_dict() or {}).get("lastSeenAt")
+    if not seen:
+        return None
+    return (datetime.now(timezone.utc) - seen).total_seconds()
+
+
 def read_ledger(pid: str) -> dict[str, int]:
     snap = db().collection("ledger").document(pid).get()
     d = snap.to_dict() if snap.exists else {}

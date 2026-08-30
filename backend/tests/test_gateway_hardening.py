@@ -37,3 +37,14 @@ def test_the_document_cap_is_generous_but_finite():
     made the model call hang and the request returned nothing at all — worse
     for a reviewer than being told no."""
     assert 5_000 < MAX_DOCUMENT_CHARS < 100_000
+
+
+def test_presence_writes_are_throttled_not_per_request():
+    """The console polls every few seconds while a tab is open, so presence is
+    recorded on read paths. Writing a timestamp on each one would be a Firestore
+    write every few seconds per open tab, for three weeks of judging — so each
+    process records at most one per minute, which is precise enough for a
+    ten-minute idle window to mean anything."""
+    from app.fleet import ledger
+
+    assert ledger._write_gap >= 30, "presence must not write on every poll"

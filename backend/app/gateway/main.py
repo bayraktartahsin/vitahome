@@ -301,6 +301,7 @@ class CaptureRequest(BaseModel):
 @app.post("/capture")
 def capture(req: CaptureRequest):
     """Parse a document supplied as text. See /capture/photo for the image path."""
+    ledger.touch_activity()
     text = (req.documentText or "").strip()
     if not text:
         # 502 said "the gateway upstream is broken". It is not: the request
@@ -347,6 +348,7 @@ def get_plan(pid: str):
 @app.get("/patient/{pid}/ledger")
 def get_ledger(pid: str):
     _clean_pid(pid)
+    ledger.touch_activity()
     """Autonomy Ledger — verifiable counts only, never invented dollars."""
     return ledger.read_ledger(pid)
 
@@ -395,6 +397,7 @@ def decide_refusal(pid: str, task_id: str, req: HumanAction):
 @app.get("/patient/{pid}/exceptions")
 def get_exceptions(pid: str):
     _clean_pid(pid)
+    ledger.touch_activity()
     """Everything waiting on a person, worst SLA first.
 
     Sorted by how long it has been waiting against its own deadline — not by
@@ -498,6 +501,7 @@ def answer_checkin(pid: str, req: CheckInAnswer):
 
 @app.get("/patient/{pid}/audit")
 def get_audit(pid: str, limit: int = Query(200, ge=1, le=1000)):
+    ledger.touch_activity()
     from google.cloud import firestore as fs
     rows = (ledger.db().collection("patients").document(pid).collection("audit")
             .order_by("at", direction=fs.Query.DESCENDING).limit(limit).stream())
@@ -576,6 +580,7 @@ class DispatchRequest(BaseModel):
 @app.post("/demo/dispatch")
 def demo_dispatch(req: DispatchRequest):
     """Hand a task to the fleet over Pub/Sub."""
+    ledger.touch_activity()
     if req.agent not in AGENT_NAMES:
         raise HTTPException(404, "unknown agent")
     _clean_pid(req.patientId)
@@ -881,6 +886,45 @@ def _compute_fleets(limit: int):
         "needingHuman": sum(1 for f in out if f["state"] == "needs_human"),
         "active": sum(1 for f in out if f["state"] == "active"),
     }
+
+
+@app.post("/demo/autorest")
+def demo_autorest(request: Request, idleMinutes: int = Query(10, ge=2, le=120)):
+    """Reset the demo once the last visitor has gone, not on a fixed clock.
+
+    "Reset when they close the tab" is the intent, but a browser reports its
+    own closing unreliably, and acting on that report would let one visitor's
+    departure wipe a session somebody else is still working in. Absence of
+    traffic is the better signal: the console polls every few seconds while a
+    tab is open, so silence means the last person left.
+
+    Two conditions, both required. Nobody has touched it for the idle window,
+    and there is actually something to clean — otherwise this would rewrite the
+    same clean state every few minutes for three weeks.
+    """
+    _guard_demo(request)
+
+    idle = ledger.idle_seconds()
+    if idle is not None and idle < idleMinutes * 60:
+        return {"reset": False, "reason": "someone is still using it",
+                "idleSeconds": round(idle)}
+
+    led = ledger.read_ledger(hero_patient.HERO_ID)
+    dirty = any(led.get(k) for k in
+                ("autonomous", "escalated", "refused", "humanDecisions",
+                 "systemsTouched", "openExceptions")) or bool(chaos.armed())
+    if not dirty:
+        try:
+            dirty = gcal.count_events() > 0
+        except gcal.CalendarUnavailable:
+            pass
+    if not dirty:
+        return {"reset": False, "reason": "already clean",
+                "idleSeconds": round(idle) if idle is not None else None}
+
+    out = demo_rehydrate(request)
+    return {"reset": True, "idleSeconds": round(idle) if idle is not None else None,
+            **out}
 
 
 @app.post("/demo/rehydrate")
