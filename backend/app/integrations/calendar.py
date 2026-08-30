@@ -150,6 +150,23 @@ def ensure_calendar() -> str:
                  json={"role": "writer",
                        "scope": {"type": "user",
                                  "value": settings.calendar_share_with}})
+
+        # Readable by anyone with the link.
+        #
+        # Sharing to one named account made the strongest evidence in this
+        # project unverifiable: a reviewer could watch the phone in the video
+        # but could not open the calendar and see the fleet's booking for
+        # themselves. A claim only the author can check is worth much less than
+        # one anybody can.
+        #
+        # Safe to make public because of what is on it: synthetic appointments
+        # for a synthetic patient, each saying so in its own description. No
+        # real person's schedule is exposed by this and none ever should be —
+        # which is why it is a separate calendar the fleet owns rather than
+        # anybody's primary one.
+        if settings.calendar_public:
+            _req("POST", f"/calendars/{_cal_id}/acl",
+                 json={"role": "reader", "scope": {"type": "default"}})
         return _cal_id
 
 

@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # scale claim is about the fleet, not about filling somebody's diary.
     # Set to "*" to let every fleet write.
     calendar_patients: str = "p_hero"
+    # Whether anyone with the link may read the fleet's calendar. On during
+    # judging so a reviewer can subscribe and watch the bookings arrive; the
+    # calendar holds nothing but synthetic demo appointments.
+    calendar_public: bool = True
 
     # Optional gate for destructive demo endpoints (reset/cohort/storm/chaos).
     # Empty = open, which is the deliberate posture while judges need to drive

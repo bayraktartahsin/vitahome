@@ -23,6 +23,17 @@ type Plan = {
 };
 
 export default function Today() {
+  // The calendar the fleet writes to is readable by anyone with this link.
+  // Without it, the second external system is something a reviewer can only
+  // take on trust from a video.
+  const [calLink, setCalLink] = useState<string>("");
+  useEffect(() => {
+    fetch(`${API}/demo/calendar`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d?.link && setCalLink(d.link))
+      .catch(() => {});
+  }, []);
+
   const [plan, setPlan] = useState<Plan | null>(null);
   const [answer, setAnswer] = useState("");
   const [sent, setSent] = useState(false);
@@ -248,6 +259,28 @@ export default function Today() {
           </div>
         )}
 
+
+        {calLink && (
+          <section className="mt-10 rounded-fam border border-fam-line bg-fam-surface p-5 shadow-sheet">
+            <h2 className="font-display text-[15px] font-semibold text-fam-ink">
+              See these appointments in your own calendar
+            </h2>
+            <p className="mt-1.5 text-[13px] leading-relaxed text-fam-ink2">
+              The fleet does not draw a picture of a calendar — it owns one, and
+              writes to it through the Google Calendar API. Add it and the
+              bookings appear on your phone alongside everything else. Read-only,
+              and it holds nothing but this synthetic patient&rsquo;s appointments.
+            </p>
+            <a
+              href={calLink}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block rounded-fam bg-fam-accent px-4 py-2.5 text-[13px] font-semibold text-fam-bg shadow-sheet transition hover:brightness-110"
+            >
+              Add the appointment calendar
+            </a>
+          </section>
+        )}
 
         <footer className="mt-12 border-t border-fam-line pt-5 text-[12px] leading-relaxed text-fam-ink2">
           VitaHome never diagnoses and never prescribes. It carries out instructions a
